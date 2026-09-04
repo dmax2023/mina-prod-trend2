@@ -65,7 +65,9 @@ export function prepararSerie(
   // média móvel 7 dias sobre o estoque acumulado
   for (let i = 0; i < serie.length; i++) {
     const janela = serie.slice(Math.max(0, i - 6), i + 1);
-    serie[i].estoqueSuavizado =
+    const alvo = serie[i];
+    if (!alvo) continue;
+    alvo.estoqueSuavizado =
       janela.reduce((acc, p) => acc + p.estoque, 0) / janela.length;
   }
 
@@ -111,4 +113,90 @@ export function diaQueAtingeLimite(reg: Regressao, limite: number): number | nul
 
 export function formatarNumero(valor: number): string {
   return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(valor);
+}
+
+// ===== Heatmap de produção: dia da semana × (centro + turno) =====
+
+export type HeatmapCelula = {
+  dia: number; // 0=Dom ... 6=Sáb
+  atingimento: number | null;
+  produzido: number;
+  meta: number;
+};
+
+export type HeatmapLinha = {
+  chave: string;
+  workCenter: string;
+  turno: string;
+  celulas: HeatmapCelula[];
+  media: number | null;
+};
+
+export const DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+export function montarHeatmap(
+  records: ProductionRecord[],
+  filtroTurno: string = "todos",
+): HeatmapLinha[] {
+  const mapa = new Map<string, { produzido: number; meta: number }[]>();
+
+  for (const r of records) {
+    if (!r.date || !r.workCenter) continue;
+    const turno = (r.shift ?? "—").toString().trim() || "—";
+    if (filtroTurno !== "todos" && turno !== filtroTurno) continue;
+
+    const meta = Number(r.targetQuantity ?? 0);
+    const produzido = Number(r.goodQuantity ?? r.totalQuantity ?? 0);
+    if (!Number.isFinite(meta) || !Number.isFinite(produzido)) continue;
+
+    const dia = new Date(`${r.date.slice(0, 10)}T00:00:00Z`).getUTCDay();
+    if (Number.isNaN(dia)) continue;
+
+    const chave = `${r.workCenter} · ${turno}`;
+    if (!mapa.has(chave)) {
+      mapa.set(
+        chave,
+        Array.from({ length: 7 }, () => ({ produzido: 0, meta: 0 })),
+      );
+    }
+    const linha = mapa.get(chave)!;
+    const celula = linha[dia];
+    if (!celula) continue;
+    celula.produzido += produzido;
+    celula.meta += meta;
+  }
+
+  const linhas: HeatmapLinha[] = Array.from(mapa.entries()).map(([chave, celulasBrutas]) => {
+    const partes = chave.split(" · ");
+    const workCenter = partes[0] ?? chave;
+    const turno = partes[1] ?? "—";
+    const celulas: HeatmapCelula[] = celulasBrutas.map((c, dia) => ({
+      dia,
+      produzido: c.produzido,
+      meta: c.meta,
+      atingimento: c.meta > 0 ? (c.produzido / c.meta) * 100 : null,
+    }));
+    const validos = celulas.filter((c) => c.atingimento !== null);
+    return {
+      chave,
+      workCenter,
+      turno,
+      celulas,
+      media: validos.length
+        ? validos.reduce((a, c) => a + (c.atingimento ?? 0), 0) / validos.length
+        : null,
+    };
+  });
+
+  return linhas.sort((a, b) => a.chave.localeCompare(b.chave, "pt-BR"));
+}
+
+export function listarTurnos(records: ProductionRecord[]): string[] {
+  return Array.from(
+    new Set(
+      records
+        .filter((r) => r.workCenter)
+        .map((r) => (r.shift ?? "—").toString().trim() || "—"),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "pt-BR"));
 }

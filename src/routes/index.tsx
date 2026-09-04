@@ -24,6 +24,7 @@ import {
   prever,
   regressaoLinear,
 } from "@/lib/twin-math";
+import { HeatmapProducao } from "@/components/HeatmapProducao";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -87,15 +88,15 @@ function DigitalTwin() {
   const atingiu = previsaoConsulta >= limite;
   const diaLimite = diaQueAtingeLimite(reg, limite);
   const producaoTotal = serie.reduce((a, p) => a + p.producao, 0);
-  const estoqueAtual = serie.length ? serie[serie.length - 1].estoque : 0;
+  const estoqueAtual = serie.length ? (serie[serie.length - 1]?.estoque ?? 0) : 0;
 
   const chartData = useMemo(() => {
     const ultimoDia = Math.max(diaConsulta + 20, serie.length + 60);
     const pontos: {
       dia: number;
-      estoque?: number;
+      estoque?: number | undefined;
       producaoDia?: number | null;
-      suavizado?: number;
+      suavizado?: number | undefined;
       previsao: number;
     }[] = [];
     for (let d = 1; d <= ultimoDia; d++) {
@@ -233,7 +234,7 @@ function DigitalTwin() {
               min={1000}
               max={1000000}
               step={1000}
-              onValueChange={(v) => setLimite(v[0])}
+              onValueChange={(v) => setLimite(v[0] ?? limite)}
             />
           </div>
 
@@ -368,6 +369,8 @@ function DigitalTwin() {
           </div>
         </div>
       </section>
+
+      <HeatmapProducao records={records} />
     </main>
   );
 }
