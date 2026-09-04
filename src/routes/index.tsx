@@ -368,6 +368,8 @@ function DigitalTwin() {
           </div>
         </div>
       </section>
+
+      <HeatmapProducao records={records} />
     </main>
   );
 }
