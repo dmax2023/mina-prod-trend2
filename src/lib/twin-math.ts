@@ -65,7 +65,9 @@ export function prepararSerie(
   // média móvel 7 dias sobre o estoque acumulado
   for (let i = 0; i < serie.length; i++) {
     const janela = serie.slice(Math.max(0, i - 6), i + 1);
-    serie[i].estoqueSuavizado =
+    const alvo = serie[i];
+    if (!alvo) continue;
+    alvo.estoqueSuavizado =
       janela.reduce((acc, p) => acc + p.estoque, 0) / janela.length;
   }
 
@@ -158,12 +160,16 @@ export function montarHeatmap(
       );
     }
     const linha = mapa.get(chave)!;
-    linha[dia].produzido += produzido;
-    linha[dia].meta += meta;
+    const celula = linha[dia];
+    if (!celula) continue;
+    celula.produzido += produzido;
+    celula.meta += meta;
   }
 
   const linhas: HeatmapLinha[] = Array.from(mapa.entries()).map(([chave, celulasBrutas]) => {
-    const [workCenter, turno] = chave.split(" · ");
+    const partes = chave.split(" · ");
+    const workCenter = partes[0] ?? chave;
+    const turno = partes[1] ?? "—";
     const celulas: HeatmapCelula[] = celulasBrutas.map((c, dia) => ({
       dia,
       produzido: c.produzido,
