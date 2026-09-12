@@ -111,7 +111,7 @@ function DigitalTwin() {
       });
     }
     return pontos;
-  }, [serie, reg, diaConsulta]);
+  }, [serie, reg, diaConsulta, consumoDiario]);
 
   const mesOffline = Boolean(error) || Boolean(data?.error);
 
