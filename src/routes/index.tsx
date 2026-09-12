@@ -67,6 +67,7 @@ function DigitalTwin() {
   const [dias, setDias] = useState(365);
   const [diaConsulta, setDiaConsulta] = useState(400);
   const [limite, setLimite] = useState(10000);
+  const [consumoDiario, setConsumoDiario] = useState(0);
 
   const { data, isFetching, dataUpdatedAt, error } = useQuery({
     queryKey: ["production", START_DATE, END_DATE],
