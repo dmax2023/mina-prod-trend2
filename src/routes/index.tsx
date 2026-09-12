@@ -85,7 +85,7 @@ function DigitalTwin() {
   );
   const reg = useMemo(() => regressaoLinear(serie), [serie]);
 
-  const previsaoConsulta = prever(reg, diaConsulta);
+  const previsaoConsulta = prever(reg, diaConsulta) - consumoDiario * diaConsulta;
   const atingiu = previsaoConsulta >= limite;
   const diaLimite = diaQueAtingeLimite(reg, limite);
   const producaoTotal = serie.reduce((a, p) => a + p.producao, 0);
