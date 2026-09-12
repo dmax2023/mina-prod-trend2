@@ -107,7 +107,7 @@ function DigitalTwin() {
         estoque: p?.estoque,
         producaoDia: p && p.producao > 0 ? p.estoque : null,
         suavizado: p?.estoqueSuavizado,
-        previsao: prever(reg, d),
+        previsao: prever(reg, d) - consumoDiario * d,
       });
     }
     return pontos;
