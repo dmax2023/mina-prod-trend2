@@ -14,7 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      notification_logs: {
+        Row: {
+          error_message: string | null
+          id: string
+          recipient: string
+          sent_at: string
+          simulation_ref: string | null
+          status: string
+        }
+        Insert: {
+          error_message?: string | null
+          id?: string
+          recipient: string
+          sent_at?: string
+          simulation_ref?: string | null
+          status: string
+        }
+        Update: {
+          error_message?: string | null
+          id?: string
+          recipient?: string
+          sent_at?: string
+          simulation_ref?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
+      notification_recipients: {
+        Row: {
+          created_at: string
+          email: string
+          enabled: boolean
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          enabled?: boolean
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          enabled?: boolean
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
