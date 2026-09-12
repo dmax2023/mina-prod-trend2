@@ -67,6 +67,7 @@ function DigitalTwin() {
   const [dias, setDias] = useState(365);
   const [diaConsulta, setDiaConsulta] = useState(400);
   const [limite, setLimite] = useState(10000);
+  const [consumoDiario, setConsumoDiario] = useState(0);
 
   const { data, isFetching, dataUpdatedAt, error } = useQuery({
     queryKey: ["production", START_DATE, END_DATE],
@@ -84,9 +85,9 @@ function DigitalTwin() {
   );
   const reg = useMemo(() => regressaoLinear(serie), [serie]);
 
-  const previsaoConsulta = prever(reg, diaConsulta);
+  const previsaoConsulta = prever(reg, diaConsulta) - consumoDiario * diaConsulta;
   const atingiu = previsaoConsulta >= limite;
-  const diaLimite = diaQueAtingeLimite(reg, limite);
+  const diaLimite = diaQueAtingeLimite({ ...reg, coef: reg.coef - consumoDiario }, limite);
   const producaoTotal = serie.reduce((a, p) => a + p.producao, 0);
   const estoqueAtual = serie.length ? (serie[serie.length - 1]?.estoque ?? 0) : 0;
 
@@ -106,11 +107,11 @@ function DigitalTwin() {
         estoque: p?.estoque,
         producaoDia: p && p.producao > 0 ? p.estoque : null,
         suavizado: p?.estoqueSuavizado,
-        previsao: prever(reg, d),
+        previsao: prever(reg, d) - consumoDiario * d,
       });
     }
     return pontos;
-  }, [serie, reg, diaConsulta]);
+  }, [serie, reg, diaConsulta, consumoDiario]);
 
   const mesOffline = Boolean(error) || Boolean(data?.error);
 
@@ -224,6 +225,17 @@ function DigitalTwin() {
               min={1}
               value={diaConsulta}
               onChange={(e) => setDiaConsulta(Math.max(1, Number(e.target.value) || 1))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="consumo">Consumo de estoque diário</Label>
+            <Input
+              id="consumo"
+              type="number"
+              min={0}
+              value={consumoDiario}
+              onChange={(e) => setConsumoDiario(Math.max(0, Number(e.target.value) || 0))}
             />
           </div>
 
