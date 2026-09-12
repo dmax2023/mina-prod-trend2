@@ -87,7 +87,7 @@ function DigitalTwin() {
 
   const previsaoConsulta = prever(reg, diaConsulta) - consumoDiario * diaConsulta;
   const atingiu = previsaoConsulta >= limite;
-  const diaLimite = diaQueAtingeLimite(reg, limite);
+  const diaLimite = diaQueAtingeLimite({ ...reg, coef: reg.coef - consumoDiario }, limite);
   const producaoTotal = serie.reduce((a, p) => a + p.producao, 0);
   const estoqueAtual = serie.length ? (serie[serie.length - 1]?.estoque ?? 0) : 0;
 
