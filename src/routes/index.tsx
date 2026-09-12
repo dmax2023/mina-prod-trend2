@@ -228,6 +228,17 @@ function DigitalTwin() {
             />
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="consumo">Consumo de estoque diário</Label>
+            <Input
+              id="consumo"
+              type="number"
+              min={0}
+              value={consumoDiario}
+              onChange={(e) => setConsumoDiario(Math.max(0, Number(e.target.value) || 0))}
+            />
+          </div>
+
           <div className="space-y-3">
             <Label>Limite máximo de estoque: {formatarNumero(limite)}</Label>
             <Slider
