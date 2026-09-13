@@ -1,19 +1,20 @@
 import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { Pencil, Trash2, Check, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { supabase } from "@/integrations/supabase/client";
+import {
+  listRecipients,
+  addRecipient,
+  updateRecipient,
+  setRecipientEnabled,
+  deleteRecipient,
+  type Recipient,
+} from "@/lib/recipients.functions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-
-type Recipient = {
-  id: string;
-  name: string;
-  email: string;
-  enabled: boolean;
-};
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -27,20 +28,23 @@ export function DestinatariosSimulacao() {
   const [editNome, setEditNome] = useState("");
   const [editEmail, setEditEmail] = useState("");
 
+  const listar = useServerFn(listRecipients);
+  const adicionarFn = useServerFn(addRecipient);
+  const atualizarFn = useServerFn(updateRecipient);
+  const habilitarFn = useServerFn(setRecipientEnabled);
+  const excluirFn = useServerFn(deleteRecipient);
+
   async function carregar() {
-    const { data, error } = await supabase
-      .from("notification_recipients")
-      .select("id, name, email, enabled")
-      .order("created_at", { ascending: true });
-    if (error) {
+    try {
+      setLista(await listar());
+    } catch {
       toast.error("Não foi possível carregar os destinatários.");
-      return;
     }
-    setLista(data ?? []);
   }
 
   useEffect(() => {
     void carregar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function adicionar(): Promise<void> {
@@ -53,15 +57,11 @@ export function DestinatariosSimulacao() {
       return void toast.error("Este e-mail já está cadastrado.");
 
     setSalvando(true);
-    const { error } = await supabase
-      .from("notification_recipients")
-      .insert({ name: n, email: e, enabled: receber });
+    const res = await adicionarFn({ data: { name: n, email: e, enabled: receber } });
     setSalvando(false);
 
-    if (error) {
-      toast.error(
-        error.code === "23505" ? "Este e-mail já está cadastrado." : "Falha ao adicionar destinatário.",
-      );
+    if (!res.ok) {
+      toast.error(res.mensagem ?? "Falha ao adicionar destinatário.");
       return;
     }
     setNome("");
@@ -73,11 +73,8 @@ export function DestinatariosSimulacao() {
 
   async function alternar(r: Recipient, valor: boolean) {
     setLista((old) => old.map((x) => (x.id === r.id ? { ...x, enabled: valor } : x)));
-    const { error } = await supabase
-      .from("notification_recipients")
-      .update({ enabled: valor })
-      .eq("id", r.id);
-    if (error) {
+    const res = await habilitarFn({ data: { id: r.id, enabled: valor } });
+    if (!res.ok) {
       toast.error("Falha ao atualizar.");
       void carregar();
     }
@@ -91,12 +88,9 @@ export function DestinatariosSimulacao() {
     if (lista.some((r) => r.id !== id && r.email.toLowerCase() === e))
       return void toast.error("Este e-mail já está cadastrado.");
 
-    const { error } = await supabase
-      .from("notification_recipients")
-      .update({ name: n, email: e })
-      .eq("id", id);
-    if (error) {
-      toast.error("Falha ao salvar alterações.");
+    const res = await atualizarFn({ data: { id, name: n, email: e } });
+    if (!res.ok) {
+      toast.error(res.mensagem ?? "Falha ao salvar alterações.");
       return;
     }
     setEditandoId(null);
@@ -105,8 +99,8 @@ export function DestinatariosSimulacao() {
   }
 
   async function excluir(id: string) {
-    const { error } = await supabase.from("notification_recipients").delete().eq("id", id);
-    if (error) {
+    const res = await excluirFn({ data: { id } });
+    if (!res.ok) {
       toast.error("Falha ao excluir.");
       return;
     }
