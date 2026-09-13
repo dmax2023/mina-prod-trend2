@@ -83,13 +83,13 @@ export function DestinatariosSimulacao() {
     }
   }
 
-  async function salvarEdicao(id: string) {
+  async function salvarEdicao(id: string): Promise<void> {
     const n = editNome.trim();
     const e = editEmail.trim().toLowerCase();
-    if (!n) return toast.error("Informe o nome.");
-    if (!EMAIL_RE.test(e)) return toast.error("E-mail inválido.");
+    if (!n) return void toast.error("Informe o nome.");
+    if (!EMAIL_RE.test(e)) return void toast.error("E-mail inválido.");
     if (lista.some((r) => r.id !== id && r.email.toLowerCase() === e))
-      return toast.error("Este e-mail já está cadastrado.");
+      return void toast.error("Este e-mail já está cadastrado.");
 
     const { error } = await supabase
       .from("notification_recipients")
