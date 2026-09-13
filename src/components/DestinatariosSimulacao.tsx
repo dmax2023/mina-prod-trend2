@@ -43,14 +43,14 @@ export function DestinatariosSimulacao() {
     void carregar();
   }, []);
 
-  async function adicionar() {
+  async function adicionar(): Promise<void> {
     const n = nome.trim();
     const e = email.trim().toLowerCase();
-    if (!n) return toast.error("Informe o nome.");
-    if (!e) return toast.error("Informe o e-mail.");
-    if (!EMAIL_RE.test(e)) return toast.error("E-mail inválido.");
+    if (!n) return void toast.error("Informe o nome.");
+    if (!e) return void toast.error("Informe o e-mail.");
+    if (!EMAIL_RE.test(e)) return void toast.error("E-mail inválido.");
     if (lista.some((r) => r.email.toLowerCase() === e))
-      return toast.error("Este e-mail já está cadastrado.");
+      return void toast.error("Este e-mail já está cadastrado.");
 
     setSalvando(true);
     const { error } = await supabase
