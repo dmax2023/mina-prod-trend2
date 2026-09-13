@@ -24,7 +24,11 @@ import {
   prever,
   regressaoLinear,
 } from "@/lib/twin-math";
+import { montarSimulacao } from "@/lib/simulation";
+import { enviarSimulacao } from "@/lib/notifications.functions";
 import { HeatmapProducao } from "@/components/HeatmapProducao";
+import { DestinatariosSimulacao } from "@/components/DestinatariosSimulacao";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -114,6 +118,41 @@ function DigitalTwin() {
   }, [serie, reg, diaConsulta, consumoDiario]);
 
   const mesOffline = Boolean(error) || Boolean(data?.error);
+
+  const [enviando, setEnviando] = useState(false);
+  const enviarFn = useServerFn(enviarSimulacao);
+
+  async function handleEnviar() {
+    if (serie.length < 2) {
+      toast.error("Não há simulação válida para enviar.");
+      return;
+    }
+    setEnviando(true);
+    try {
+      const simulation = montarSimulacao({
+        workCenter,
+        dias,
+        diaConsulta,
+        limite,
+        consumoDiario,
+        serie,
+        reg,
+        registros: records.length,
+      });
+      const res = await enviarFn({ data: { simulation } });
+      if (res.ok) {
+        toast.success("Simulação enviada com sucesso.");
+      } else if (res.motivo === "sem-destinatarios") {
+        toast.error("Nenhum destinatário habilitado.");
+      } else {
+        toast.error(res.mensagem ?? "Falha ao enviar a simulação.");
+      }
+    } catch {
+      toast.error("Falha ao enviar a simulação.");
+    } finally {
+      setEnviando(false);
+    }
+  }
 
   return (
     <main className="min-h-screen px-4 py-8 md:px-10">
@@ -379,10 +418,17 @@ function DigitalTwin() {
               ? `o limite de ${formatarNumero(limite)} já foi atingido.`
               : `o limite de ${formatarNumero(limite)} ainda não foi atingido.`}
           </div>
+
+          <div className="mt-4 flex justify-end">
+            <Button onClick={() => void handleEnviar()} disabled={enviando || serie.length < 2}>
+              {enviando ? "Enviando..." : "Enviar simulação"}
+            </Button>
+          </div>
         </div>
       </section>
 
       <HeatmapProducao records={records} />
+      <DestinatariosSimulacao />
     </main>
   );
 }
