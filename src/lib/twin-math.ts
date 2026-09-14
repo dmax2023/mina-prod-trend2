@@ -22,13 +22,18 @@ export function listarWorkCenters(records: ProductionRecord[]): string[] {
   ).sort();
 }
 
+export const TODOS_WORK_CENTERS = "todos";
+
 export function prepararSerie(
   records: ProductionRecord[],
   workCenter: string,
   qtdDias: number,
 ): SeriePonto[] {
   const filtrados = records.filter(
-    (r) => r.workCenter === workCenter && r.date && Number.isFinite(Number(r.totalQuantity)),
+    (r) =>
+      r.date &&
+      Number.isFinite(Number(r.totalQuantity)) &&
+      (workCenter === TODOS_WORK_CENTERS ? Boolean(r.workCenter) : r.workCenter === workCenter),
   );
   if (filtrados.length === 0) return [];
 

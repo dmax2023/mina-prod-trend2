@@ -25,6 +25,7 @@ import {
   prepararSerie,
   prever,
   regressaoLinear,
+  TODOS_WORK_CENTERS,
 } from "@/lib/twin-math";
 import { montarSimulacao } from "@/lib/simulation";
 import { enviarSimulacao } from "@/lib/notifications.functions";
@@ -238,6 +239,7 @@ function DigitalTwin() {
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={TODOS_WORK_CENTERS}>Todos</SelectItem>
                 {(workCenters.length ? workCenters : [workCenter]).map((wc) => (
                   <SelectItem key={wc} value={wc}>
                     {wc}
