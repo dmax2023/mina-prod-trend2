@@ -89,7 +89,9 @@ export const enviarSimulacao = createServerFn({ method: "POST" })
       return { ok: false, enviados: 0, falhas: 0, motivo: "sem-destinatarios" };
     }
 
-    const from = process.env["RESEND_FROM_EMAIL"] ?? "Digital Twin <onboarding@resend.dev>";
+    const from =
+      process.env["RESEND_FROM_EMAIL"] ??
+      "Digital Twin <simulacoes@forecastingdigitaltwin.com.br>";
     const html = montarHtml(simulation);
     const subject = "Resultado da Simulação — Digital Twin";
 
