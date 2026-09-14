@@ -25,6 +25,7 @@ import {
   prepararSerie,
   prever,
   regressaoLinear,
+  TODOS_WORK_CENTERS,
 } from "@/lib/twin-math";
 import { montarSimulacao } from "@/lib/simulation";
 import { enviarSimulacao } from "@/lib/notifications.functions";
