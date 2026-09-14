@@ -239,6 +239,7 @@ function DigitalTwin() {
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={TODOS_WORK_CENTERS}>Todos</SelectItem>
                 {(workCenters.length ? workCenters : [workCenter]).map((wc) => (
                   <SelectItem key={wc} value={wc}>
                     {wc}
