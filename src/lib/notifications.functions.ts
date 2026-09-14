@@ -95,6 +95,7 @@ export const enviarSimulacao = createServerFn({ method: "POST" })
 
     let enviados = 0;
     let falhas = 0;
+    let ultimaFalha: string | null = null;
 
     for (const r of recipients) {
       let status = "sent";
@@ -113,7 +114,17 @@ export const enviarSimulacao = createServerFn({ method: "POST" })
           const body = await res.text();
           console.error(`Resend falhou [${res.status}]: ${body}`);
           status = "failed";
-          errorMessage = `${res.status}`;
+          let detalhe = "";
+          try {
+            detalhe = String((JSON.parse(body) as { message?: unknown }).message ?? "");
+          } catch {
+            detalhe = "";
+          }
+          errorMessage = detalhe ? `${res.status}: ${detalhe}`.slice(0, 300) : `${res.status}`;
+          ultimaFalha =
+            res.status === 403
+              ? "O remetente de teste do Resend só entrega para o e-mail dono da conta. Verifique um domínio no Resend para enviar aos demais destinatários."
+              : "Falha no serviço de e-mail ao enviar a simulação.";
           falhas++;
         } else {
           enviados++;
@@ -122,6 +133,7 @@ export const enviarSimulacao = createServerFn({ method: "POST" })
         console.error("Erro de envio", e);
         status = "failed";
         errorMessage = "network";
+        ultimaFalha = "Falha de rede ao contatar o serviço de e-mail.";
         falhas++;
       }
 
@@ -134,7 +146,13 @@ export const enviarSimulacao = createServerFn({ method: "POST" })
     }
 
     if (enviados === 0) {
-      return { ok: false, enviados, falhas, motivo: "erro", mensagem: "Não foi possível enviar os e-mails." };
+      return {
+        ok: false,
+        enviados,
+        falhas,
+        motivo: "erro",
+        mensagem: ultimaFalha ?? "Não foi possível enviar os e-mails.",
+      };
     }
     return { ok: true, enviados, falhas };
   });
