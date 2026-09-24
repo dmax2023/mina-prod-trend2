@@ -1,6 +1,9 @@
 import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 
 import type { ProductionRecord } from "@/lib/mes.functions";
+import { enviarSimulacao } from "@/lib/notifications.functions";
 import { TODOS_WORK_CENTERS } from "@/lib/twin-math";
 import { buildScenarios, type SimulationBatch } from "@/lib/inventorySimulation";
 import { Button } from "@/components/ui/button";
@@ -45,6 +48,8 @@ export function InventorySimulator({
   const [consumo, setConsumo] = useState(0);
   const [capacidade, setCapacidade] = useState(100000);
   const [batch, setBatch] = useState<SimulationBatch | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const enviarFn = useServerFn(enviarSimulacao);
 
   function simular() {
     setBatch(
@@ -59,6 +64,28 @@ export function InventorySimulator({
         baseAtualizadaEm: new Date(dataAtualizadaEm ?? Date.now()).toISOString(),
       }),
     );
+  }
+
+  async function enviarCenarios() {
+    if (!batch) {
+      toast.error("Não há simulação válida para enviar.");
+      return;
+    }
+    setEnviando(true);
+    try {
+      const res = await enviarFn({ data: { simulation: batch } });
+      if (res.ok) {
+        toast.success("Simulação enviada com sucesso.");
+      } else if (res.motivo === "sem-destinatarios") {
+        toast.error("Nenhum destinatário habilitado.");
+      } else {
+        toast.error(res.mensagem ?? "Falha ao enviar a simulação.");
+      }
+    } catch {
+      toast.error("Falha ao enviar a simulação.");
+    } finally {
+      setEnviando(false);
+    }
   }
 
   return (
@@ -155,6 +182,11 @@ export function InventorySimulator({
             <SimulationSummary batch={batch} />
             <SimulationChart batch={batch} />
             <SimulationTable batch={batch} />
+            <div className="flex justify-end">
+              <Button onClick={() => void enviarCenarios()} disabled={enviando}>
+                {enviando ? "Enviando..." : "Enviar simulação"}
+              </Button>
+            </div>
             <SimulationMethodology batch={batch} />
           </div>
         ) : (

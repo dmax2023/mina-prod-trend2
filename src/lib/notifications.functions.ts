@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { SimulationResult } from "./simulation";
+import type { SimulationBatch } from "./inventorySimulation";
 
 type EnvioResultado = {
   ok: boolean;
@@ -60,11 +61,83 @@ function montarHtml(s: SimulationResult): string {
 </body></html>`;
 }
 
+function isSimulationBatch(s: SimulationResult | SimulationBatch): s is SimulationBatch {
+  return "cenarios" in s && Array.isArray(s.cenarios);
+}
+
+function montarHtmlCenarios(s: SimulationBatch): string {
+  const faixa = s.faixaRobusta
+    ? `${fmt(s.faixaRobusta.min)} a ${fmt(s.faixaRobusta.max)} un/dia`
+    : "Não existe uma faixa comum às três condições de produção.";
+  const linhas = s.cenarios
+    .map(
+      (c) => `<tr>
+        <td style="padding:8px;border-bottom:1px solid #ddd">${c.id}</td>
+        <td style="padding:8px;border-bottom:1px solid #ddd">${c.producaoRotulo} — ${fmt(c.producaoValor)}/dia</td>
+        <td style="padding:8px;border-bottom:1px solid #ddd">${c.consumoRotulo} — ${fmt(c.consumoValor)}/dia</td>
+        <td style="padding:8px;border-bottom:1px solid #ddd">${fmt(c.estoqueNoDia)}</td>
+        <td style="padding:8px;border-bottom:1px solid #ddd">${c.primeiroAlerta}</td>
+        <td style="padding:8px;border-bottom:1px solid #ddd"><strong>${c.resultado}</strong></td>
+      </tr>`,
+    )
+    .join("");
+
+  return `<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;color:#111;background:#ffffff;padding:24px">
+  <h2 style="margin:0 0 4px">Simulação Automática de Cenários de Estoque</h2>
+  <p style="color:#555;margin:0 0 16px">Data/hora: ${new Date(s.geradoEm).toLocaleString("pt-BR")}</p>
+
+  <h3>Parâmetros utilizados</h3>
+  <ul>
+    <li>Centro de trabalho: ${s.workCenter}</li>
+    <li>Estoque disponível hoje: ${fmt(s.estoqueInicial)}</li>
+    <li>Consumo informado: ${fmt(s.consumoInformado)} unidades/dia</li>
+    <li>Dia previsto: ${fmt(s.dia)}</li>
+    <li>Capacidade máxima: ${fmt(s.capacidade)}</li>
+    <li>Última base analisada: ${new Date(s.baseAtualizadaEm).toLocaleString("pt-BR")}</li>
+  </ul>
+
+  <h3>Resumo</h3>
+  <ul>
+    <li>Cenários distintos: ${fmt(s.resumo.total)}</li>
+    <li>Adequados: ${fmt(s.resumo.adequados)}</li>
+    <li>Risco de falta: ${fmt(s.resumo.falta)}</li>
+    <li>Excesso: ${fmt(s.resumo.excesso)}</li>
+    <li>Faixa de consumo robusta: ${faixa}</li>
+  </ul>
+
+  <h3>Cenários projetados</h3>
+  <table style="border-collapse:collapse;width:100%;font-size:13px">
+    <thead><tr>
+      <th style="padding:8px;text-align:left;border-bottom:2px solid #999">Cenário</th>
+      <th style="padding:8px;text-align:left;border-bottom:2px solid #999">Produção</th>
+      <th style="padding:8px;text-align:left;border-bottom:2px solid #999">Consumo</th>
+      <th style="padding:8px;text-align:left;border-bottom:2px solid #999">Estoque no ${s.dia}º dia</th>
+      <th style="padding:8px;text-align:left;border-bottom:2px solid #999">Primeiro alerta</th>
+      <th style="padding:8px;text-align:left;border-bottom:2px solid #999">Resultado</th>
+    </tr></thead>
+    <tbody>${linhas}</tbody>
+  </table>
+
+  <h3>Dados técnicos</h3>
+  <ul>
+    <li>Produção típica: ${fmt(s.tecnico.producaoTipica)} unidades/dia</li>
+    <li>Q25 da média móvel de 7 dias: ${fmt(s.tecnico.q25)}</li>
+    <li>Q75 da média móvel de 7 dias: ${fmt(s.tecnico.q75)}</li>
+    <li>Coeficiente da regressão: ${s.tecnico.coef.toFixed(2)}</li>
+    <li>Intercepto: ${s.tecnico.intercepto.toFixed(2)}</li>
+    <li>R²: ${s.tecnico.r2.toFixed(4)}</li>
+  </ul>
+  </body></html>`;
+}
+
 export const enviarSimulacao = createServerFn({ method: "POST" })
-  .inputValidator((input: { simulation: SimulationResult }) => input)
+  .inputValidator((input: { simulation: SimulationResult | SimulationBatch }) => input)
   .handler(async ({ data }): Promise<EnvioResultado> => {
     const simulation = data.simulation;
-    if (!simulation || !Number.isFinite(simulation.forecast?.previsaoDiaConsulta)) {
+    const valida = simulation && (isSimulationBatch(simulation)
+      ? simulation.cenarios.length > 0 && Number.isFinite(simulation.dia)
+      : Number.isFinite(simulation.forecast?.previsaoDiaConsulta));
+    if (!valida) {
       return { ok: false, enviados: 0, falhas: 0, motivo: "erro", mensagem: "Simulação inválida." };
     }
 
@@ -92,7 +165,9 @@ export const enviarSimulacao = createServerFn({ method: "POST" })
     const from =
       process.env["RESEND_FROM_EMAIL"] ??
       "Digital Twin <simulacoes@forecastingdigitaltwin.com.br>";
-    const html = montarHtml(simulation);
+    const html = isSimulationBatch(simulation)
+      ? montarHtmlCenarios(simulation)
+      : montarHtml(simulation);
     const subject = "Resultado da Simulação — Digital Twin";
 
     let enviados = 0;
@@ -140,7 +215,7 @@ export const enviarSimulacao = createServerFn({ method: "POST" })
       }
 
       await supabaseAdmin.from("notification_logs").insert({
-        simulation_ref: simulation.generatedAt,
+        simulation_ref: isSimulationBatch(simulation) ? simulation.geradoEm : simulation.generatedAt,
         recipient: r.email,
         status,
         error_message: errorMessage,
