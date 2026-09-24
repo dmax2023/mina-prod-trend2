@@ -227,6 +227,8 @@ function DigitalTwin() {
         />
       </section>
 
+      <HeatmapProducao records={records} />
+
       <section className="mx-auto mt-4 grid max-w-7xl gap-4 lg:grid-cols-[320px_1fr]">
         <div className="panel space-y-6 p-5">
           <h2 className="text-xs font-semibold uppercase tracking-[0.25em] text-primary">
@@ -440,7 +442,6 @@ function DigitalTwin() {
         dataAtualizadaEm={dataUpdatedAt}
       />
 
-      <HeatmapProducao records={records} />
       <DestinatariosSimulacao />
     </main>
   );
