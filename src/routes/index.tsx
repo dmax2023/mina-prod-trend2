@@ -30,6 +30,7 @@ import {
 import { montarSimulacao } from "@/lib/simulation";
 import { enviarSimulacao } from "@/lib/notifications.functions";
 import { HeatmapProducao } from "@/components/HeatmapProducao";
+import { InventorySimulator } from "@/components/inventory-simulator/InventorySimulator";
 import { DestinatariosSimulacao } from "@/components/DestinatariosSimulacao";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -430,6 +431,14 @@ function DigitalTwin() {
           </div>
         </div>
       </section>
+
+      <InventorySimulator
+        records={records}
+        workCenters={workCenters}
+        workCenterAtual={workCenter}
+        dias={dias}
+        dataAtualizadaEm={dataUpdatedAt}
+      />
 
       <HeatmapProducao records={records} />
       <DestinatariosSimulacao />
