@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      mes_connections: {
+        Row: {
+          active: boolean
+          base_url: string
+          created_at: string
+          endpoints: string[]
+          id: string
+          last_sync_at: string | null
+          name: string
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          base_url: string
+          created_at?: string
+          endpoints?: string[]
+          id?: string
+          last_sync_at?: string | null
+          name: string
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          base_url?: string
+          created_at?: string
+          endpoints?: string[]
+          id?: string
+          last_sync_at?: string | null
+          name?: string
+          token?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       notification_logs: {
         Row: {
           error_message: string | null

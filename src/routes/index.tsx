@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ComposedChart,
   Line,
@@ -17,7 +17,14 @@ import {
 } from "recharts";
 import { Activity, AlertTriangle, CheckCircle2, Gauge, RefreshCw, Radio } from "lucide-react";
 
-import { getProductionCount } from "@/lib/mes.functions";
+import {
+  getActiveConnectionInfo,
+  getProductionCount,
+  type ProductionRecord,
+  type ProductionSnapshot,
+} from "@/lib/mes.functions";
+import { ConexoesApi } from "@/components/ConexoesApi";
+import { SyncMes, type SyncInfo } from "@/components/SyncMes";
 import {
   diaQueAtingeLimite,
   formatarNumero,
@@ -67,8 +74,19 @@ export const Route = createFileRoute("/")({
 });
 
 const START_DATE = "2025-01-01T00:00:00Z";
-const END_DATE = new Date().toISOString();
-const POLL_MS = 5000;
+const POLL_MS = 1000;
+const DIA_MS = 86_400_000;
+
+const chave = (r: ProductionRecord) =>
+  `${r.date}|${r.shift ?? ""}|${r.workCenter ?? ""}|${r.product ?? ""}`;
+
+/** Carga histórica inicial + consulta incremental (último dia) reconciliada sem duplicidades. */
+function reconciliar(anteriores: ProductionRecord[], novos: ProductionRecord[], desde: number) {
+  const mapa = new Map<string, ProductionRecord>();
+  for (const r of anteriores) if (Date.parse(r.date) < desde) mapa.set(chave(r), r);
+  for (const r of novos) mapa.set(chave(r), r);
+  return [...mapa.values()];
+}
 
 function DigitalTwin() {
   const [workCenter, setWorkCenter] = useState("LINHA 1 GARRAFÃO 20L");
@@ -77,15 +95,65 @@ function DigitalTwin() {
   const [limite, setLimite] = useState(10000);
   const [consumoDiario, setConsumoDiario] = useState(0);
 
+  const qc = useQueryClient();
+  const { data: conexao, isFetched: conexaoResolvida } = useQuery({
+    queryKey: ["mes-active-connection"],
+    queryFn: () => getActiveConnectionInfo(),
+    refetchInterval: 15000,
+  });
+  const connectionId = conexao?.id ?? null;
+  const amostras = useRef<number[]>([]);
+  const [sync, setSync] = useState<SyncInfo | null>(null);
+
+  useEffect(() => {
+    amostras.current = [];
+    setSync(null);
+  }, [connectionId]);
+
   const { data, isFetching, dataUpdatedAt, error } = useQuery({
-    queryKey: ["production", START_DATE, END_DATE],
-    queryFn: () => getProductionCount({ data: { startDate: START_DATE, endDate: END_DATE } }),
+    queryKey: ["production", connectionId],
+    enabled: Boolean(connectionId),
+    queryFn: async (): Promise<ProductionSnapshot> => {
+      const prev = qc.getQueryData<ProductionSnapshot>(["production", connectionId]);
+      const temBase = Boolean(prev && !prev.error && prev.records.length);
+      const ultimo = temBase
+        ? Math.max(...prev!.records.map((r) => Date.parse(r.date)).filter(Number.isFinite))
+        : NaN;
+      const desde = Number.isFinite(ultimo) ? ultimo - DIA_MS : Date.parse(START_DATE);
+      const snap = await getProductionCount({
+        data: { connectionId: connectionId!, startDate: new Date(desde).toISOString() },
+      });
+      if (snap.error === "Conexão MES alterada") {
+        void qc.invalidateQueries({ queryKey: ["mes-active-connection"] });
+      }
+      // Latência E2E somente quando o MES fornece eventTimestamp (nunca inventado).
+      const recebido = Date.parse(snap.receivedAt);
+      const eventos = snap.records
+        .map((r) => (r.eventTimestamp ? Date.parse(r.eventTimestamp) : NaN))
+        .filter(Number.isFinite);
+      const ultimoEvento = eventos.length ? Math.max(...eventos) : null;
+      if (ultimoEvento !== null) {
+        amostras.current = [...amostras.current, recebido - ultimoEvento].slice(-500);
+      }
+      setSync({
+        requestedAt: snap.requestedAt,
+        receivedAt: snap.receivedAt,
+        eventTimestamp: ultimoEvento !== null ? new Date(ultimoEvento).toISOString() : null,
+        amostras: amostras.current,
+        erro: snap.error,
+      });
+      if (snap.error || !temBase) return snap;
+      return { ...snap, records: reconciliar(prev!.records, snap.records, desde) };
+    },
     refetchInterval: POLL_MS,
     refetchIntervalInBackground: true,
     staleTime: 0,
   });
 
-  const records = data?.records ?? [];
+  const records = useMemo(
+    () => (data && !data.error && data.connectionId === connectionId ? data.records : []),
+    [data, connectionId],
+  );
   const workCenters = useMemo(() => listarWorkCenters(records), [records]);
   const serie = useMemo(
     () => prepararSerie(records, workCenter, dias),
@@ -121,7 +189,20 @@ function DigitalTwin() {
     return pontos;
   }, [serie, reg, diaConsulta, consumoDiario]);
 
-  const mesOffline = Boolean(error) || Boolean(data?.error);
+  const semConexao = conexaoResolvida && !connectionId;
+  const mesOffline = semConexao || Boolean(error) || Boolean(data?.error);
+  const mensagemMes = semConexao ? "Conexão MES não configurada" : "Falha na conexão MES";
+
+  // Centro selecionado inexistente na nova fonte → "Todos".
+  useEffect(() => {
+    if (
+      workCenters.length &&
+      workCenter !== TODOS_WORK_CENTERS &&
+      !workCenters.includes(workCenter)
+    ) {
+      setWorkCenter(TODOS_WORK_CENTERS);
+    }
+  }, [workCenters, workCenter]);
 
   const [enviando, setEnviando] = useState(false);
   const enviarFn = useServerFn(enviarSimulacao);
@@ -167,7 +248,7 @@ function DigitalTwin() {
             Gêmeo Digital · Produção MES
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Sincronização automática com o endpoint /v1/ProductionCount a cada 5 segundos.
+            Sincronização automática a cada 1 segundo com a conexão MES ativa.
             Os dados alimentam o modelo de regressão linear e a previsão de estoque acumulado.
           </p>
         </div>
@@ -179,7 +260,7 @@ function DigitalTwin() {
           />
           <div className="text-xs leading-tight">
             <div className="font-semibold uppercase tracking-widest">
-              {mesOffline ? "MES offline" : "Streaming 5s"}
+              {mesOffline ? mensagemMes : "Streaming 1s"}
             </div>
             <div className="text-muted-foreground">
               Último sync:{" "}
@@ -193,6 +274,8 @@ function DigitalTwin() {
           />
         </div>
       </header>
+
+      <SyncMes conexao={conexao?.name ?? null} info={sync} semConexao={semConexao} />
 
       <section className="mx-auto mt-6 grid max-w-7xl gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi
@@ -322,7 +405,7 @@ function DigitalTwin() {
             {serie.length < 2 ? (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                 {mesOffline
-                  ? (data?.error ?? "Falha ao consultar o MES")
+                  ? (semConexao ? mensagemMes : (data?.error ?? mensagemMes))
                   : "Sincronizando dados do MES..."}
               </div>
             ) : (
@@ -435,6 +518,7 @@ function DigitalTwin() {
       </section>
 
       <InventorySimulator
+        key={connectionId ?? "sem-conexao"}
         records={records}
         workCenters={workCenters}
         workCenterAtual={workCenter}
@@ -443,6 +527,8 @@ function DigitalTwin() {
       />
 
       <DestinatariosSimulacao />
+
+      <ConexoesApi />
     </main>
   );
 }
