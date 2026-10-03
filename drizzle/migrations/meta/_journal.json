@@ -15,6 +15,13 @@
       "when": 1789258399208,
       "tag": "0001_restrict_notification_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790991860579,
+      "tag": "0002_create_mes_connections",
+      "breakpoints": true
     }
   ]
 }
