@@ -62,21 +62,29 @@ export const getProductionCount = createServerFn({ method: "GET" })
     return done(Array.isArray(r.json) ? (r.json as ProductionRecord[]) : [], null);
   });
 
-function endpointFn(kind: "Scrap" | "Rework" | "ProductionOee" | "ProductionState") {
-  return createServerFn({ method: "GET" })
-    .inputValidator((input: { startDate: string; endDate: string }) =>
-      z.object({ startDate: z.string(), endDate: z.string() }).parse(input),
-    )
-    .handler(async ({ data }): Promise<{ data: unknown; error: string | null }> => {
-      const { getActiveMesConnection, fetchMes } = await import("./mes.server");
-      const conn = await getActiveMesConnection();
-      if (!conn) return { data: null, error: "Conexão MES não configurada" };
-      const r = await fetchMes(conn, kind, data.startDate, data.endDate);
-      return r.ok ? { data: r.json, error: null } : { data: null, error: r.error };
-    });
+const periodo = (input: { startDate: string; endDate: string }) =>
+  z.object({ startDate: z.string(), endDate: z.string() }).parse(input);
+
+async function consultar(
+  kind: "Scrap" | "Rework" | "ProductionOee" | "ProductionState",
+  d: { startDate: string; endDate: string },
+): Promise<{ data: unknown; error: string | null }> {
+  const { getActiveMesConnection, fetchMes } = await import("./mes.server");
+  const conn = await getActiveMesConnection();
+  if (!conn) return { data: null, error: "Conexão MES não configurada" };
+  const r = await fetchMes(conn, kind, d.startDate, d.endDate);
+  return r.ok ? { data: r.json, error: null } : { data: null, error: r.error };
 }
 
-export const getScrap = endpointFn("Scrap");
-export const getRework = endpointFn("Rework");
-export const getOee = endpointFn("ProductionOee");
-export const getProductionState = endpointFn("ProductionState");
+export const getScrap = createServerFn({ method: "GET" })
+  .inputValidator(periodo)
+  .handler(({ data }) => consultar("Scrap", data));
+export const getRework = createServerFn({ method: "GET" })
+  .inputValidator(periodo)
+  .handler(({ data }) => consultar("Rework", data));
+export const getOee = createServerFn({ method: "GET" })
+  .inputValidator(periodo)
+  .handler(({ data }) => consultar("ProductionOee", data));
+export const getProductionState = createServerFn({ method: "GET" })
+  .inputValidator(periodo)
+  .handler(({ data }) => consultar("ProductionState", data));
