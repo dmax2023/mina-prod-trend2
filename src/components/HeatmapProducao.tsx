@@ -32,7 +32,7 @@ export function HeatmapProducao({ records }: { records: ProductionRecord[] }) {
           <div>
             <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em]">
               <Flame className="size-4 text-primary" />
-              Heatmap de produção
+              Mapa de Calor da Produção
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
               Atingimento da meta (%) por dia da semana × centro de trabalho e turno.
