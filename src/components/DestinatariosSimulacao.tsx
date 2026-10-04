@@ -112,7 +112,7 @@ export function DestinatariosSimulacao() {
     <section className="mx-auto mt-4 max-w-7xl">
       <div className="panel p-5">
         <h2 className="text-sm font-semibold uppercase tracking-[0.2em]">
-          Destinatários das simulações
+          Notificações
         </h2>
 
         <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto_auto] md:items-end">
