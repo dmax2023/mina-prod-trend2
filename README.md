@@ -1,823 +1,752 @@
-# Production Predictor
+# Gêmeo Digital de Produção e Estoque — MINA MES
 
-crie uma aplicação de gêmio digital que consuma dados de uma API de um sistema mes cuja URL do swager (https://mina.com.br/integration/swagger/index.html), Api integrations (https://mina.com.br/integration/swagger/v1/swagger.json) fazendo consultas no endpoint (/v1/ProductionCount/{startDate}/{endDate}). Criei um código inicial para realizar a consulta e gerar um gráfico de regreção, no entanto ao realizar a consulta não garanto que esse código é um gemio digital porque a consulta aos dados não é automática e nem em tempo real. Dessa forma essa consulta precisa ser automática a cada 5 segundos e após o estabelecimento dessa rotina automatica e posteriormente as informações são trabalhadas para geração do gráfico, campos e demais processos.
+> Gêmeo Digital orientado a dados para monitoramento da produção, análise de tendência, projeção de estoque e simulação de cenários, integrado ao **MINA MES** por API REST.
 
+**Aplicação web:** https://mina-prod-trend.lovable.app/  
+**Repositório:** https://github.com/dmax2023/mina-prod-trend
 
-# ==========================================================
+---
 
-# INSTALAÇÃO
+## 1. Visão geral
 
-# ==========================================================
+Este projeto implementa um **Gêmeo Digital (GD) de manufatura** que transforma dados de produção coletados no chão de fábrica em informações para monitoramento, análise e apoio à decisão. A solução foi estruturada segundo a lógica funcional da **ISO 23247**, conectando o elemento físico observado, o sistema MES, a camada de aquisição de dados, o núcleo analítico do gêmeo e a interface do usuário.
 
+O fluxo principal é:
 
+```mermaid
+flowchart LR
+    A[Produto na esteira] --> B[Sensor óptico]
+    B --> C[Dispositivo IoT]
+    C -->|Wi-Fi| D[MINA MES]
+    D -->|API REST / JSON| E[Camada de servidor]
+    E --> F[Pré-processamento]
+    F --> G[Modelo analítico]
+    G --> H[Simulação de cenários]
+    H --> I[Dashboard / Apoio à decisão]
+    I --> J[Notificações por e-mail]
+```
 
+O projeto **não executa controle automático da máquina**. As recomendações são informacionais e a decisão permanece com o usuário.
 
-!pip install -q requests pandas numpy scikit-learn matplotlib ipywidgets
+---
 
+## 2. Objetivos do Gêmeo Digital
 
+A solução foi criada para:
 
+- acompanhar a produção por **centro de trabalho, dia e turno**;
+- sincronizar dados do MES de forma periódica;
+- identificar padrões de atingimento de metas por meio de **heatmap**;
+- estimar a tendência produtiva por regressão linear;
+- projetar possíveis saldos de estoque a partir de produção, consumo e capacidade;
+- comparar condições de **falta, adequação e excesso**;
+- identificar o primeiro alerta de falta ou atingimento da capacidade;
+- calcular uma **faixa robusta de consumo**;
+- registrar destinatários e encaminhar resultados de simulação por e-mail;
+- apoiar decisões sem exigir que o usuário manipule diretamente modelos matemáticos.
 
-# ==========================================================
+### Valor para micro e pequenas empresas
 
-# IMPORTS
+A proposta busca reduzir a barreira de uso de análise industrial ao reutilizar dados já disponíveis em um MES e apresentar os resultados em uma aplicação web. Em empresas que já dispõem de sensoriamento, conectividade e uma API de produção, o GD pode apoiar planejamento de estoque, identificação antecipada de excesso/falta, comparação de hipóteses operacionais e compartilhamento de resultados com gestores sem exigir uma infraestrutura analítica separada para cada usuário.
 
-# ==========================================================
+---
 
+## 3. Arquitetura baseada na ISO 23247
 
+A solução pode ser relacionada às entidades funcionais da ISO 23247 da seguinte forma:
 
+| Entidade / camada | Implementação no projeto |
+|---|---|
+| **Observable Manufacturing Elements** | linha de produção, produto, sensor óptico, centro de trabalho |
+| **Data Collection / Device Communication** | dispositivo IoT, Wi-Fi, MINA MES, API REST |
+| **Digital Twin Core** | pré-processamento, série temporal, regressão, simulação, classificação e alertas |
+| **User Entity** | dashboard, parâmetros, gráficos, tabelas, heatmap e envio de simulações |
+| **Cross-System Functions** | autenticação por API key, validação, persistência, gateway de e-mail e segurança de credenciais |
 
-import requests
+---
 
-import pandas as pd
+## 4. Tecnologias e frameworks
 
-import numpy as np
+| Categoria | Tecnologia | Papel no projeto |
+|---|---|---|
+| Plataforma de desenvolvimento | **Lovable** | desenvolvimento e publicação da aplicação web |
+| Frontend / Full-stack | **React 19 + TypeScript** | interface e lógica tipada |
+| Framework | **TanStack Start** | funções server-side e aplicação full-stack |
+| Rotas | **TanStack Router** | roteamento da aplicação |
+| Sincronização e cache | **TanStack React Query** | consultas periódicas, cache e revalidação dos dados do MES |
+| UI | **Radix UI** | componentes acessíveis e reutilizáveis |
+| Estilização | **Tailwind CSS** | layout responsivo e identidade visual |
+| Gráficos | **Recharts** | séries temporais, regressão e envelope de cenários |
+| Validação | **Zod** | validação de entradas e payloads de funções de servidor |
+| Banco de dados | **Supabase / PostgreSQL** | conexões MES, destinatários e logs de notificação |
+| E-mail | **Resend** | envio transacional de resultados |
+| Gateway externo | **Lovable Connector Gateway** | mediação segura da chamada ao Resend |
+| Build | **Vite** | desenvolvimento e empacotamento |
+| Runtime server | **Nitro** | execução das funções no servidor |
+| Versionamento | **Git / GitHub** | rastreabilidade do código-fonte |
+| Qualidade de código | **ESLint + Prettier** | padronização, lint e formatação |
 
+---
 
+## 5. Integração com o MINA MES
 
+### 5.1 Fonte de dados
 
-from sklearn.linear_model import LinearRegression
+A principal fonte do Gêmeo Digital é o endpoint **`ProductionCount`**. O projeto também possui camada de integração preparada para consultar endpoints de **Scrap**, **Rework**, **ProductionOee** e **ProductionState**, embora o fluxo principal atual utilize `ProductionCount`.
 
+Cada registro de produção pode conter, entre outros atributos:
 
+- data;
+- turno;
+- centro de trabalho;
+- produto;
+- unidade de medida;
+- quantidade boa;
+- quantidade total;
+- meta de produção;
+- timestamp do evento, quando fornecido pelo MES.
 
+### 5.2 Cadastro de conexão
 
-import matplotlib.pyplot as plt
+A aplicação possui um módulo **Conexões de API**. Cada conexão contém:
 
-import matplotlib.dates as mdates
+- nome;
+- URL base;
+- lista de endpoints;
+- token/API key;
+- situação ativa/inativa;
+- data da última sincronização.
 
+Somente **uma conexão MES pode permanecer ativa por vez**. O token é recuperado apenas no servidor e aparece mascarado na interface.
 
+### 5.3 Estratégia de atualização
 
+O fluxo usa:
 
-import ipywidgets as widgets
+1. carga histórica inicial;
+2. consultas incrementais sobre o período mais recente;
+3. reconciliação dos registros por chave composta;
+4. atualização do cache da aplicação;
+5. recomputação dos indicadores e modelos.
 
+A chave lógica usada para reconciliação combina:
 
+`data + turno + centro de trabalho + produto`.
 
+---
 
-from IPython.display import display, clear_output
+## 6. Sincronização e soft real-time
 
+A versão mais recente do código-fonte define polling de **1 s** (`POLL_MS = 1000`) e um prazo de referência de **1 s** para avaliação da latência ponta a ponta (`D_RT = 1000`). A latência somente é calculada quando o MES fornece um `eventTimestamp` real; o sistema não cria um timestamp artificial para simular desempenho.
 
+> **Nota de versão:** no momento da elaboração deste README, a implantação pública ainda exibia atualização de 5 s. O código anexado contém a configuração de 1 s. Para manter documentação e implantação coerentes, publique a revisão mais recente antes de declarar 1 s no ambiente de produção.
 
+### Latência ponta a ponta
 
-# ==========================================================
+$$
+L_i=t^{DT}_i-t^{evento}_i
+\tag{1}
+$$
 
-# CONFIGURAÇÃO API
+onde:
 
-# ==========================================================
+- $t^{evento}_i$: instante registrado para o evento de produção;
+- $t^{DT}_i$: instante de recebimento pelo Gêmeo Digital;
+- $L_i$: latência ponta a ponta do evento $i$.
 
+A condição de conformidade é:
 
+$$
+L_i \leq D_{RT}
+\tag{2}
+$$
 
+A aplicação mantém até 500 amostras e apresenta **P50, P95, P99, máximo e percentual de eventos dentro de 1 s**.
 
-BASE_URL = "https://mina.com.br/integration/v1"
+$$
+C_{RT}=\frac{100}{N}\sum_{i=1}^{N}\mathbb{I}(L_i\leq D_{RT})
+\tag{3}
+$$
 
+A denominação **soft real-time** deve ser usada somente quando a latência puder ser efetivamente medida. Sem `eventTimestamp`, a interpretação correta é sincronização periódica / near-real-time.
 
+---
 
+## 7. Pré-processamento dos dados
 
-API_KEY = "3E32D3C4A36E491AA7E7D911D1096442"
+O pré-processamento ocorre antes da modelagem:
 
+1. filtra registros válidos e o centro de trabalho selecionado;
+2. converte quantidades para valores numéricos;
+3. agrega a produção por dia;
+4. ordena os registros cronologicamente;
+5. completa datas ausentes com produção igual a zero;
+6. seleciona a janela histórica solicitada pelo usuário;
+7. calcula a produção acumulada e séries suavizadas.
 
+### Produção diária consolidada
 
+$$
+P_d=\sum_{i\in R_d}q_i
+\tag{4}
+$$
 
-HEADERS = {
+onde $R_d$ é o conjunto de registros do dia $d$ e $q_i$ a quantidade do registro $i$.
 
-    "ApiKey": API_KEY,
+### Nota conceitual importante
 
-    "accept": "application/json"
+No código legado, a propriedade `estoque` da série principal representa a soma acumulada da produção. Academicamente, essa variável deve ser interpretada como **produção acumulada**, e não como estoque físico medido:
 
-}
+$$
+A_t=\sum_{i=1}^{t}P_i
+\tag{5}
+$$
 
+O **saldo de estoque projetado** somente é definido quando estoque inicial, produção e consumo são combinados na simulação, conforme a Eq. (11).
 
+---
 
+## 8. Modelo analítico
 
-WORKCENTER = "LINHA 1 GARRAFÃO 20L"
+### 8.1 Média móvel
 
+A interface principal suaviza a série acumulada por uma janela de até sete dias. O simulador também calcula média móvel de sete dias sobre a **produção diária** para obter os percentis usados nos níveis reduzido e elevado.
 
+$$
+\bar{q}_7(t)=\frac{1}{n_t}\sum_{j=0}^{n_t-1}q(t-j)
+\tag{6}
+$$
 
+### 8.2 Regressão linear
 
-START_DATE = "2025-01-01T00:00:00Z"
+A tendência é ajustada por mínimos quadrados:
 
-END_DATE   = "2025-12-31T23:59:59Z"
+$$
+\widehat{A}_t=\beta_0+\beta_1t
+\tag{7}
+$$
 
+onde:
 
+- $\beta_0$: intercepto;
+- $\beta_1$: inclinação/tendência produtiva;
+- $\widehat{A}_t$: produção acumulada estimada.
 
+O sistema também apresenta $R^2$ como medida de aderência do ajuste histórico. **$R^2$ não deve ser interpretado isoladamente como validação de capacidade preditiva fora da amostra.**
 
-# ==========================================================
+---
 
-# BUSCA DADOS API
+## 9. Geração dos cenários de estoque
 
-# ==========================================================
+O simulador congela um **snapshot único** dos dados no momento do clique. Isso impede que uma nova atualização do MES altere a base enquanto os cenários de um mesmo lote estão sendo comparados.
 
+### 9.1 Níveis de produção
 
+$$
+\begin{aligned}
+P_{tip} &= \max(\beta_1,0),\\
+P_{red} &= \max\left[0,\min(Q_{25},P_{tip})\right],\\
+P_{elev} &= \max(P_{tip},Q_{75}).
+\end{aligned}
+\tag{8}
+$$
 
+- **Típica:** inclinação positiva da regressão;
+- **Reduzida:** limitada pelo percentil 25 da média móvel da produção diária;
+- **Elevada:** limitada pelo percentil 75 da média móvel da produção diária.
 
-def obter_dados_mes():
+### 9.2 Níveis de consumo
 
+$$
+C_k=\rho_k C,\qquad
+\rho_k\in\{0.80,0.90,1.00,1.10,1.20\}
+\tag{9}
+$$
 
+Quando $C=0$, é gerado apenas um cenário de **sem expedição**.
 
+O cruzamento de 3 níveis de produção com 5 níveis de consumo gera até **15 cenários**, com remoção de combinações numericamente duplicadas.
 
-    url = (
+### 9.3 Taxa líquida
 
-        f"{BASE_URL}/ProductionCount/"
+$$
+L_s=P_s-C_s
+\tag{10}
+$$
 
-        f"{START_DATE}/{END_DATE}"
+### 9.4 Saldo de estoque projetado
 
-    )
+$$
+E_s(t)=E_0+(P_s-C_s)t
+\tag{11}
+$$
 
+onde:
 
+- $E_0$: estoque físico disponível informado pelo usuário;
+- $P_s$: produção do cenário;
+- $C_s$: consumo do cenário;
+- $t$: horizonte;
+- $E_s(t)$: saldo projetado.
 
+### 9.5 Classificação
 
-    response = requests.get(
+$$
+\begin{cases}
+E_s(D)<0 & \Rightarrow \text{FALTA}\\
+0\leq E_s(D)\leq E_{max} & \Rightarrow \text{ADEQUADO}\\
+E_s(D)>E_{max} & \Rightarrow \text{EXCESSO}
+\end{cases}
+\tag{12}
+$$
 
-        url,
+### 9.6 Primeiro alerta
 
-        headers=HEADERS,
+$$
+d_{alert}=\begin{cases}
+\left\lceil\dfrac{E_0}{C_s-P_s}\right\rceil, & C_s>P_s\\[6pt]
+\left\lceil\dfrac{E_{max}-E_0}{P_s-C_s}\right\rceil, & P_s>C_s
+\end{cases}
+\tag{13}
+$$
 
-        timeout=60
+### 9.7 Faixa operacional de consumo
 
-    )
+$$
+P_s+\frac{E_0-E_{max}}{D}\leq C\leq P_s+\frac{E_0}{D}
+\tag{14}
+$$
 
+A interseção das faixas obtidas para produção reduzida, típica e elevada é apresentada como **faixa de consumo robusta**.
 
+### 9.8 Envelope dos cenários
 
+$$
+E_{inf}(t)=\min_s E_s(t),\qquad
+E_{sup}(t)=\max_s E_s(t)
+\tag{15}
+$$
 
-    response.raise_for_status()
+A linha de referência utiliza produção típica e consumo informado:
 
+$$
+E_{ref}(t)=E_0+(P_{tip}-C)t
+\tag{16}
+$$
 
+---
 
+## 10. Heatmap de produção
 
-    df = pd.DataFrame(
+O heatmap resume o atingimento de meta por **dia da semana × centro de trabalho × turno**.
 
-        response.json()
+$$
+Atingimento(\%)=\frac{Q_{produzida}}{Q_{meta}}\times100
+\tag{17}
+$$
 
-    )
+A produção utiliza preferencialmente `goodQuantity`; na ausência desse valor, utiliza `totalQuantity`.
 
+O heatmap é útil para identificar:
 
+- turnos com menor desempenho;
+- dias recorrentes de baixa produção;
+- diferenças entre centros de trabalho;
+- períodos em que a meta é mais ou menos atingida.
 
+---
 
-    df["date"] = pd.to_datetime(df["date"])
+## 11. Funcionalidades presentes
 
+### Monitoramento
 
+- status da conexão MES;
+- última sincronização;
+- quantidade de registros;
+- centros de trabalho identificados;
+- produção acumulada;
+- tendência produtiva;
+- métricas de sincronização quando existe timestamp de evento.
 
+### Visualização
 
-    return df
+- heatmap de produção;
+- gráfico histórico;
+- média móvel;
+- regressão linear;
+- limite de estoque;
+- marcador do horizonte escolhido.
 
+### Simulação
 
+- horizonte de previsão;
+- estoque inicial;
+- consumo-base;
+- capacidade máxima;
+- até 15 cenários;
+- envelope dos cenários;
+- cenário esperado;
+- classificação falta/adequado/excesso;
+- primeiro alerta;
+- faixa robusta de consumo.
 
+### Comunicação
 
+- cadastro de destinatários;
+- habilitação/desabilitação de notificações;
+- envio por Resend;
+- registro de sucesso/falha em `notification_logs`.
 
-print("Buscando dados MES...")
+### Administração da fonte de dados
 
+- cadastrar conexão MES;
+- editar URL, endpoints e token;
+- testar conexão;
+- ativar/desativar a fonte oficial;
+- excluir conexão;
+- acompanhar a última sincronização.
 
+---
 
+## 12. Jornada do usuário
 
-df_api = obter_dados_mes()
+### Etapa 1 — Configurar a fonte MES
 
+1. Acesse **Conexões de API**.
+2. Clique em **Nova conexão**.
+3. Informe nome, URL base, endpoints e API key.
+4. Salve e use **Testar conexão**.
+5. Marque a conexão desejada como **Ativa**.
 
+> Apenas a conexão ativa alimenta o Gêmeo Digital.
 
+### Etapa 2 — Verificar a sincronização
 
-print(
+Observe o painel **Sincronização MES ↔ Gêmeo Digital**.
 
-    f"{len(df_api)} registros carregados."
+Quando o MES fornece timestamp do evento, verifique:
 
-)
+- latência E2E;
+- P50;
+- P95;
+- P99;
+- máximo;
+- percentual de eventos dentro de 1 s.
 
+Se aparecer **TIMESTAMP INDISPONÍVEL**, os dados continuam sendo atualizados, mas a conformidade soft real-time não pode ser demonstrada.
 
+### Etapa 3 — Explorar a produção
 
+Use:
 
-print(
+- KPIs para visão geral;
+- heatmap para comparar dias e turnos;
+- seleção de centro de trabalho para análise específica;
+- opção **Todos** para visão consolidada.
 
-    df_api["workCenter"].unique()
+### Etapa 4 — Configurar a análise principal
 
-)
+| Campo | Como usar |
+|---|---|
+| **Centro de trabalho** | escolha a linha que deseja analisar ou `Todos` |
+| **Dias observados** | define a janela histórica usada no ajuste |
+| **Dia que deseja verificar** | horizonte futuro da projeção principal |
+| **Consumo de estoque diário** | saída diária assumida |
+| **Limite máximo de estoque** | capacidade/política usada como referência |
 
+### Etapa 5 — Executar a simulação automática
 
+No módulo de cenários, informe:
 
+| Campo | Recomendação |
+|---|---|
+| **Centro de trabalho** | mantenha coerência com a linha operacional estudada |
+| **Prever estoque no dia** | escolha o horizonte relacionado à decisão que precisa tomar |
+| **Estoque disponível hoje** | use contagem física ou valor oficial do estoque atual |
+| **Quanto costuma sair por dia** | use média real de consumo/expedição, não um valor arbitrário |
+| **Capacidade máxima** | use limite físico, contratual ou operacional real |
 
-df_api = df_api[
+Clique em **Simular cenários**. O sistema calcula automaticamente as variações de produção e consumo.
 
-    df_api["workCenter"] == WORKCENTER
+### Etapa 6 — Interpretar o resultado
 
-].copy()
+Priorize quatro perguntas:
 
+1. **Há cenários de falta?**  
+   Indicam que consumo pode superar produção e estoque inicial dentro do horizonte.
 
+2. **Há cenários de excesso?**  
+   Indicam possibilidade de ultrapassar a capacidade informada.
 
+3. **Qual é o primeiro alerta?**  
+   Mostra o instante estimado para falta ou capacidade.
 
-print(
+4. **Existe faixa robusta de consumo?**  
+   Representa o intervalo de consumo que mantém o saldo dentro dos limites nas três condições de produção.
 
-    f"{len(df_api)} registros para {WORKCENTER}"
+### Etapa 7 — Compartilhar a análise
 
-)
+1. Cadastre os destinatários.
+2. Habilite **Receber notificações**.
+3. Execute a simulação.
+4. Clique em **Enviar simulação**.
 
+A aplicação envia parâmetros, resultados, cenários e informações técnicas por e-mail.
 
+---
 
+## 13. Como escolher parâmetros adequados
 
-# ==========================================================
+Os parâmetros devem representar condições reais ou hipóteses claramente justificadas.
 
-# PREPARA SÉRIE
+### Janela histórica
 
-# ==========================================================
+- use uma janela curta quando houver mudança recente de processo;
+- use uma janela maior quando a produção for relativamente estável;
+- evite misturar longos períodos com condições produtivas estruturalmente diferentes;
+- compare o $R^2$ apenas como aderência histórica, não como garantia de previsão futura.
 
+### Horizonte
 
+O horizonte deve acompanhar o ciclo decisório:
 
+- curto prazo: programação operacional;
+- médio prazo: planejamento de produção e expedição;
+- horizonte maior: somente quando a estabilidade do processo justificar a extrapolação.
 
-def preparar_serie(df, qtd_dias):
+Quanto maior o horizonte, maior o efeito acumulado de pequenas diferenças entre produção e consumo.
 
+### Estoque inicial
 
+Use o estoque físico mais recente. A qualidade da projeção de estoque depende diretamente de $E_0$.
 
+### Consumo
 
-    dados = df.copy()
+Use preferencialmente:
 
+- média histórica de expedição;
+- pedidos confirmados convertidos em demanda diária;
+- política formal de consumo da empresa.
 
+O simulador cria automaticamente níveis de 80%, 90%, 100%, 110% e 120% do valor-base.
 
+### Capacidade
 
-    dados["totalQuantity"] = pd.to_numeric(
+Pode representar:
 
-        dados["totalQuantity"],
+- capacidade física do armazém;
+- limite de segurança;
+- limite de capital imobilizado definido pela empresa;
+- política interna de estoque máximo.
 
-        errors="coerce"
+Se o valor utilizado não for um limite físico, documente sua origem para evitar interpretações incorretas.
 
-    )
+---
 
+## 14. Persistência de dados
 
+O Supabase/PostgreSQL mantém estruturas auxiliares da aplicação:
 
+| Tabela | Finalidade |
+|---|---|
+| `mes_connections` | conexões MES, endpoints, token, situação e última sincronização |
+| `notification_recipients` | nome, e-mail e habilitação dos destinatários |
+| `notification_logs` | rastreabilidade dos envios e falhas de e-mail |
 
-    dados = dados.dropna(
+Os registros de produção do MES são consultados pela API e mantidos no estado/cache da aplicação; o Supabase não atua, na implementação atual, como repositório intermediário da série histórica de produção.
 
-        subset=["totalQuantity"]
+---
 
-    )
+## 15. Segurança e boas práticas
 
+O projeto adota algumas decisões importantes:
 
+- API keys do MES são usadas apenas em funções server-side;
+- token exibido na interface é mascarado;
+- somente uma conexão MES pode ser marcada como fonte oficial;
+- entradas são validadas com Zod;
+- operações administrativas usam cliente Supabase server-side;
+- chaves de serviço não devem ser expostas ao navegador;
+- logs de envio permitem rastrear falhas de notificação;
+- cache de produção é descartado quando a fonte MES é trocada;
+- código utiliza TypeScript, ESLint e Prettier para consistência.
 
+### Atenção importante
 
-    # Agrupar por data e somar produção diária
+**Nunca publique tokens, API keys ou arquivos `.env` no GitHub.** O README anterior continha credenciais em texto claro. Qualquer chave que já tenha sido versionada publicamente deve ser considerada comprometida e rotacionada no serviço correspondente.
 
-    dados = (
+---
 
-        dados
+## 16. Instalação local
 
-        .groupby("date")["totalQuantity"]
+### Pré-requisitos
 
-        .sum()
+- Node.js compatível com Vite/TanStack Start;
+- npm, pnpm ou Bun;
+- projeto Supabase configurado;
+- acesso a uma API MES compatível;
+- conta/integração Resend, caso o envio de e-mail seja utilizado.
 
-        .reset_index()
+### Clone
 
-    )
+```bash
+git clone https://github.com/dmax2023/mina-prod-trend.git
+cd mina-prod-trend
+```
 
+### Dependências
 
+Com npm:
 
+```bash
+npm install
+```
 
-    dados = dados.sort_values(
+ou com Bun:
 
-        "date"
+```bash
+bun install
+```
 
-    )
+### Variáveis de ambiente
 
+Crie seu próprio `.env` local. Não copie credenciais de ambientes públicos.
 
+```env
+SUPABASE_URL=
+SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+VITE_SUPABASE_URL=
+VITE_SUPABASE_PUBLISHABLE_KEY=
+LOVABLE_API_KEY=
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=
+```
 
+Algumas variáveis podem ser injetadas automaticamente pelo Lovable Cloud em implantação gerenciada.
 
-    # Criar série temporal completa com todos os dias
+### Desenvolvimento
 
-    data_min = dados["date"].min()
-
-    data_max = dados["date"].max()
-
-
-
-
-    # Criar dataframe com todos os dias do período
-
-    datas_completas = pd.date_range(start=data_min, end=data_max, freq='D')
-
-    df_completo = pd.DataFrame({'date': datas_completas})
-
-
-
-
-    # Fazer merge com os dados existentes (preenchendo dias sem produção com 0)
-
-    dados = pd.merge(df_completo, dados, on='date', how='left')
-
-    dados['totalQuantity'] = dados['totalQuantity'].fillna(0)
-
-
-
-
-    # Pegar os últimos qtd_dias dias
-
-    dados = dados.tail(qtd_dias)
-
-
-
-
-    # Criar coluna de dia sequencial
-
-    dados["dia"] = np.arange(1, len(dados) + 1)
-
-
-
-
-    # Calcular estoque acumulado CORRETAMENTE
-
-    dados["estoque"] = dados["totalQuantity"].cumsum()
-
-
-
-
-    # Aplicar média móvel para suavizar
-
-    dados["estoque_suavizado"] = dados["estoque"].rolling(window=7, min_periods=1).mean()
-
-
-
-
-    return dados
-
-
-
-
-# ==========================================================
-
-# CONTROLES
-
-# ==========================================================
-
-
-
-
-dias_observados = widgets.IntText(
-
-    value=365,
-
-    description="Quantidade de dias com dados observados:"
-
-)
-
-
-
-
-dia_consulta = widgets.IntText(
-
-    value=400,
-
-    description="Dia que deseja verificar:"
-
-)
-
-
-
-
-limite_estoque = widgets.IntSlider(
-
-    value=10000,
-
-    min=1000,
-
-    max=1000000,
-
-    step=100,
-
-    description="Limite máximo:"
-
-)
-
-
-
-
-# ==========================================================
-
-# FUNÇÃO PARA CRIAR GRÁFICO
-
-# ==========================================================
-
-
-
-
-def criar_grafico(dados, futuro, consulta, limite, estoque_consulta, modelo):
-
-
-
-
-    fig, ax = plt.subplots(figsize=(12, 6))
-
-
-
-
-    # DEBUG - Verificar se há dados
-
-    print(f"Dados shape: {dados.shape}")
-
-    print(f"Colunas: {dados.columns}")
-
-    print(f"Primeiros 5 dias: {dados.head()}")
-
-
-
-
-    # 1. Plotar todos os pontos de estoque (incluindo zeros)
-
-    ax.scatter(dados["dia"], dados["estoque"],
-
-               color='gray', s=15, alpha=0.5, label='Todos os dias', zorder=1)
-
-
-
-
-    # 2. Plotar apenas pontos com produção > 0
-
-    dados_com_producao = dados[dados["totalQuantity"] > 0]
-
-    if len(dados_com_producao) > 0:
-
-        ax.scatter(dados_com_producao["dia"], dados_com_producao["estoque"],
-
-                   color='black', s=30, label='Dias com produção', zorder=2)
-
-
-
-
-    # 3. Plotar linha de estoque suavizado
-
-    ax.plot(dados["dia"], dados["estoque_suavizado"],
-
-            color='orange', linewidth=2, label='Estoque suavizado (MM7)', zorder=1)
-
-
-
-
-    # 4. Linha de previsão linear
-
-    ax.plot(futuro["dia"], futuro["previsao"],
-
-            color='blue', linewidth=2, label='Regressão linear', zorder=1)
-
-
-
-
-    # 5. Linha do limite
-
-    ax.axhline(y=limite, color='red', linestyle='--', linewidth=2,
-
-               label=f'Limite: {limite}', zorder=1)
-
-
-
-
-    # 6. Linha do dia consultado
-
-    ax.axvline(x=consulta, color='green', linestyle=':', linewidth=2,
-
-               label=f'Dia: {consulta}', zorder=1)
-
-
-
-
-    # 7. Ponto consultado
-
-    if consulta <= len(futuro):
-
-        ax.scatter(consulta, estoque_consulta,
-
-                   color='green', s=150, marker='*',
-
-                   edgecolors='darkgreen', linewidth=2,
-
-                   label=f'Previsão dia {consulta}: {estoque_consulta:,.0f}', zorder=3)
-
-
-
-
-    ax.set_title('Previsão do Estoque Acumulado', fontsize=16, fontweight='bold', pad=20)
-
-    ax.set_xlabel('Dia', fontsize=12)
-
-    ax.set_ylabel('Estoque acumulado', fontsize=12)
-
-
-
-
-    ax.grid(True, alpha=0.3, linestyle='--')
-
-    ax.set_axisbelow(True)
-
-
-
-
-    ax.legend(loc='upper left', fontsize=9, framealpha=0.9)
-
-
-
-
-    # Ajustar limites
-
-    x_max = max(consulta + 50, futuro["dia"].max() if len(futuro) > 0 else 100)
-
-    ax.set_xlim(0, x_max)
-
-
-
-
-    y_max = max(limite * 1.1, dados["estoque"].max() * 1.1)
-
-    ax.set_ylim(0, y_max)
-
-
-
-
-    ax.xaxis.set_major_locator(plt.MaxNLocator(10))
-
-
-
-
-    plt.tight_layout()
-
-    return fig
-
-
-
-
-# ==========================================================
-
-# FUNÇÃO PRINCIPAL
-
-# ==========================================================
-
-
-
-
-def atualizar(*args):
-
-
-
-
-    clear_output(wait=True)
-
-
-
-
-    dias = dias_observados.value
-
-    consulta = dia_consulta.value
-
-    limite = limite_estoque.value
-
-
-
-
-    print(f"Processando com dias={dias}, consulta={consulta}, limite={limite}")
-
-
-
-
-    dados = preparar_serie(df_api, dias)
-
-
-
-
-    if len(dados) < 2:
-
-        display(widgets.HTML("<h1>Previsão de Estoque com Regressão Linear</h1>"))
-
-        print("Dados insuficientes para previsão.")
-
-        return
-
-
-
-
-    print(f"Dados preparados: {len(dados)} registros")
-
-    print(f"Estoque máximo: {dados['estoque'].max():,.0f}")
-
-    print(f"Estoque mínimo: {dados['estoque'].min():,.0f}")
-
-    print(f"Produção total: {dados['totalQuantity'].sum():,.0f}")
-
-
-
-
-    # Treinar modelo com dados suavizados
-
-    X = dados[["dia"]]
-
-    y = dados["estoque_suavizado"]
-
-
-
-
-    modelo = LinearRegression()
-
-    modelo.fit(X, y)
-
-
-
-
-    print(f"Coeficiente: {modelo.coef_[0]:.2f}")
-
-    print(f"Intercepto: {modelo.intercept_:.2f}")
-
-
-
-
-    # Criar previsão
-
-    ultimo_dia = max(consulta + 100, dados["dia"].max() + 100)
-
-    futuro = pd.DataFrame({
-
-        "dia": np.arange(1, ultimo_dia + 1)
-
-    })
-
-    futuro["previsao"] = modelo.predict(futuro[["dia"]])
-
-
-
-
-    # Previsão para o dia consultado
-
-    if consulta <= len(futuro):
-
-        estoque_consulta = futuro.loc[futuro["dia"] == consulta, "previsao"].iloc[0]
-
-    else:
-
-        estoque_consulta = 0
-
-
-
-
-    atingiu_limite = estoque_consulta >= limite
-
-
-
-
-    # Criar resultado
-
-    if atingiu_limite:
-
-        resultado_texto = f"""
-
-        <h2>Resultado</h2>
-
-        <p>No dia {consulta} o estoque previsto é de {estoque_consulta:,.2f} unidades.</p>
-
-        <p><strong style="color: red;">⚠️ Portanto, o limite de {limite} já foi atingido.</strong></p>
-
-        <hr>
-
-        <p><small>Equação: Estoque = {modelo.coef_[0]:.2f} × Dia + {modelo.intercept_:.2f}</small></p>
-
-        """
-
-    else:
-
-        resultado_texto = f"""
-
-        <h2>Resultado</h2>
-
-        <p>No dia {consulta} o estoque previsto é de {estoque_consulta:,.2f} unidades.</p>
-
-        <p><strong style="color: green;">✅ Portanto, o limite de {limite} ainda não foi atingido.</strong></p>
-
-        <hr>
-
-        <p><small>Equação: Estoque = {modelo.coef_[0]:.2f} × Dia + {modelo.intercept_:.2f}</small></p>
-
-        """
-
-
-
-
-    # Painéis
-
-    painel_esquerdo = widgets.VBox([
-
-        widgets.HTML("<h2>Parâmetros</h2>"),
-
-        dias_observados,
-
-        widgets.HTML("<br>"),
-
-        dia_consulta,
-
-        widgets.HTML("<br>"),
-
-        limite_estoque
-
-    ], layout=widgets.Layout(
-
-        width="30%",
-
-        border="1px solid lightgray",
-
-        padding="15px"
-
-    ))
-
-
-
-
-    painel_direito = widgets.VBox([
-
-        widgets.HTML(resultado_texto)
-
-    ], layout=widgets.Layout(
-
-        width="70%",
-
-        padding="15px"
-
-    ))
-
-
-
-
-    painel = widgets.HBox([painel_esquerdo, painel_direito])
-
-
-
-
-    # Criar gráfico
-
-    fig = criar_grafico(dados, futuro, consulta, limite, estoque_consulta, modelo)
-
-
-
-
-    # Título
-
-    titulo = widgets.HTML("<h1 style='text-align: center;'>Previsão de Estoque com Regressão Linear</h1>")
-
-
-
-
-    # Exibir tudo
-
-    display(titulo)
-
-    display(painel)
-
-
-
-
-    # Exibir gráfico
-
-    plt.show(fig)
-
-
-
-
-    print("\n✅ Gráfico gerado com sucesso!")
-
-
-
-
-# ==========================================================
-
-# EVENTOS
-
-# ==========================================================
-
-
-
-
-dias_observados.observe(atualizar, names='value')
-
-dia_consulta.observe(atualizar, names='value')
-
-limite_estoque.observe(atualizar, names='value')
-
-
-
-
-# ==========================================================
-
-# INICIAR
-
-# ==========================================================
-
-
-
-
-atualizar()
-
-This project was built with [Lovable](https://lovable.dev).
-
-**Live app**: https://mina-prod-trend.lovable.app
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/b5b08658-6e64-41e7-9676-b1da8f497b20).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+```bash
 npm run dev
 ```
+
+### Build
+
+```bash
+npm run build
+```
+
+### Lint
+
+```bash
+npm run lint
+```
+
+### Formatação
+
+```bash
+npm run format
+```
+
+---
+
+## 17. Estrutura principal do projeto
+
+```text
+src/
+├── components/
+│   ├── ConexoesApi.tsx
+│   ├── DestinatariosSimulacao.tsx
+│   ├── HeatmapProducao.tsx
+│   ├── SyncMes.tsx
+│   └── inventory-simulator/
+│       ├── InventorySimulator.tsx
+│       ├── SimulationChart.tsx
+│       ├── SimulationMethodology.tsx
+│       ├── SimulationSummary.tsx
+│       └── SimulationTable.tsx
+├── integrations/supabase/
+├── lib/
+│   ├── connections.functions.ts
+│   ├── inventorySimulation.ts
+│   ├── mes.functions.ts
+│   ├── mes.server.ts
+│   ├── notifications.functions.ts
+│   ├── recipients.functions.ts
+│   ├── simulation.ts
+│   └── twin-math.ts
+└── routes/
+    └── index.tsx
+```
+
+---
+
+## 18. Limitações atuais
+
+Para interpretar corretamente os resultados:
+
+- a produção futura é representada por tendência linear;
+- produção e consumo são considerados constantes dentro de cada cenário;
+- o consumo-base é informado pelo usuário;
+- o estoque físico histórico não é atualmente fornecido pelo MES usado no estudo;
+- o $R^2$ mede ajuste histórico e não substitui validação fora da amostra;
+- MAE/MAPE/RMSE de backtesting não estão implementados no fluxo operacional atual;
+- sazonalidade, indisponibilidade, troca de produto e variáveis exógenas não são explicitamente modeladas;
+- a solução não executa atuação automática sobre o processo físico;
+- a comprovação de soft real-time depende da existência de timestamp real do evento no MES.
+
+---
+
+## 19. Próximas evoluções recomendadas
+
+- implementar **rolling-origin backtesting** com MAE e métricas adequadas ao conjunto de dados;
+- utilizar série histórica real de estoque e expedição, quando disponível;
+- substituir nomenclaturas legadas de `estoque acumulado` por `produção acumulada` na visão principal;
+- incorporar modelos não lineares somente quando apresentarem ganho fora da amostra;
+- integrar variáveis exógenas relevantes, como pedidos, lead time e indisponibilidade;
+- avaliar comunicação orientada a eventos (MQTT/WebSocket) quando houver necessidade de menor latência;
+- ampliar integração dos endpoints de refugo, retrabalho, OEE e estado de produção;
+- adicionar testes unitários para funções matemáticas e regras de classificação.
+
+---
+
+## 20. Referências metodológicas
+
+Referências relacionadas ao desenvolvimento e às decisões metodológicas empregadas:
+
+[1] ISO, “Automation systems and integration—Digital twin framework for manufacturing—Part 1: Overview and general principles,” **ISO 23247-1:2021**, Geneva, Switzerland, 2021.
+
+[2] ISO, “Automation systems and integration—Digital twin framework for manufacturing—Part 2: Reference architecture,” **ISO 23247-2:2021**, Geneva, Switzerland, 2021.
+
+[3] J. P. C. Kleijnen, *Design and Analysis of Simulation Experiments*, 2nd ed. Cham, Switzerland: Springer, 2015, doi: 10.1007/978-3-319-18087-8.
+
+[4] A. Cimino, M. G. Gnoni, F. Longo, and A. La Rosa, “Digital Twin (DT) based methodology to support effective design of industrial production lines,” *Procedia Computer Science*, vol. 217, pp. 1896–1907, 2023, doi: 10.1016/j.procs.2022.12.390.
+
+[5] S. Teerasoponpong and A. Sopadang, “Decision support system for adaptive sourcing and inventory management in small- and medium-sized enterprises,” *Robotics and Computer-Integrated Manufacturing*, vol. 73, Art. no. 102226, 2022, doi: 10.1016/j.rcim.2021.102226.
+
+[6] E. A. Silver, D. F. Pyke, and D. J. Thomas, *Inventory and Production Management in Supply Chains*, 4th ed. Boca Raton, FL, USA: CRC Press, 2016.
+
+---
+
+## 21. Interpretação resumida
+
+A lógica do projeto pode ser resumida em quatro etapas:
+
+**Observar → Sincronizar → Simular → Decidir**
+
+1. **Observar:** sensor, IoT e MES registram o processo produtivo.
+2. **Sincronizar:** a aplicação consulta a fonte MES e atualiza sua representação digital.
+3. **Simular:** produção histórica é transformada em níveis produtivos e combinada com hipóteses de consumo.
+4. **Decidir:** o usuário compara falta, adequação, excesso, alertas e faixa operacional antes de agir no processo real.
+
+---
+
+## 22. Licença e uso
+
+Defina explicitamente uma licença no repositório antes de reutilização por terceiros. Na ausência de um arquivo `LICENSE`, o código permanece protegido pelas regras padrão de copyright e não deve ser assumido como software livre.
+
+---
+
+**Status:** protótipo funcional de pesquisa e apoio à decisão industrial.  
+**Escopo:** monitoramento, análise, projeção e simulação; sem controle automático do processo físico.
