@@ -143,10 +143,11 @@ A versão mais recente do código-fonte define polling de **1 s** (`POLL_MS = 10
 
 ### Latência ponta a ponta
 
-$$
-L_i=t^{DT}_i-t^{evento}_i
-\tag{1}
-$$
+> **Compatibilidade com GitHub:** as expressões abaixo usam blocos `math`, formato suportado pelo renderizador MathJax do GitHub. As fórmulas foram mantidas em uma única linha sempre que possível para evitar quebras e alinhamentos verticais indesejados.
+
+```math
+L_i = t_i^{\mathrm{DT}} - t_i^{\mathrm{evento}}
+```
 
 onde:
 
@@ -156,17 +157,15 @@ onde:
 
 A condição de conformidade é:
 
-$$
-L_i \leq D_{RT}
-\tag{2}
-$$
+```math
+L_i \leq D_{\mathrm{RT}}
+```
 
 A aplicação mantém até 500 amostras e apresenta **P50, P95, P99, máximo e percentual de eventos dentro de 1 s**.
 
-$$
-C_{RT}=\frac{100}{N}\sum_{i=1}^{N}\mathbb{I}(L_i\leq D_{RT})
-\tag{3}
-$$
+```math
+C_{\mathrm{RT}} = \frac{100}{N} \sum_{i=1}^{N} \mathbb{I}\!\left(L_i \leq D_{\mathrm{RT}}\right)
+```
 
 A denominação **soft real-time** deve ser usada somente quando a latência puder ser efetivamente medida. Sem `eventTimestamp`, a interpretação correta é sincronização periódica / near-real-time.
 
@@ -186,10 +185,9 @@ O pré-processamento ocorre antes da modelagem:
 
 ### Produção diária consolidada
 
-$$
-P_d=\sum_{i\in R_d}q_i
-\tag{4}
-$$
+```math
+P_d = \sum_{i \in R_d} q_i
+```
 
 onde $R_d$ é o conjunto de registros do dia $d$ e $q_i$ a quantidade do registro $i$.
 
@@ -197,10 +195,9 @@ onde $R_d$ é o conjunto de registros do dia $d$ e $q_i$ a quantidade do registr
 
 No código legado, a propriedade `estoque` da série principal representa a soma acumulada da produção. Academicamente, essa variável deve ser interpretada como **produção acumulada**, e não como estoque físico medido:
 
-$$
-A_t=\sum_{i=1}^{t}P_i
-\tag{5}
-$$
+```math
+A_t = \sum_{i=1}^{t} P_i
+```
 
 O **saldo de estoque projetado** somente é definido quando estoque inicial, produção e consumo são combinados na simulação, conforme a Eq. (11).
 
@@ -212,19 +209,17 @@ O **saldo de estoque projetado** somente é definido quando estoque inicial, pro
 
 A interface principal suaviza a série acumulada por uma janela de até sete dias. O simulador também calcula média móvel de sete dias sobre a **produção diária** para obter os percentis usados nos níveis reduzido e elevado.
 
-$$
-\bar{q}_7(t)=\frac{1}{n_t}\sum_{j=0}^{n_t-1}q(t-j)
-\tag{6}
-$$
+```math
+\bar{q}_7(t) = \frac{1}{n_t} \sum_{j=0}^{n_t-1} q(t-j)
+```
 
 ### 8.2 Regressão linear
 
 A tendência é ajustada por mínimos quadrados:
 
-$$
-\widehat{A}_t=\beta_0+\beta_1t
-\tag{7}
-$$
+```math
+\widehat{A}_t = \beta_0 + \beta_1 t
+```
 
 onde:
 
@@ -242,14 +237,9 @@ O simulador congela um **snapshot único** dos dados no momento do clique. Isso 
 
 ### 9.1 Níveis de produção
 
-$$
-\begin{aligned}
-P_{tip} &= \max(\beta_1,0),\\
-P_{red} &= \max\left[0,\min(Q_{25},P_{tip})\right],\\
-P_{elev} &= \max(P_{tip},Q_{75}).
-\end{aligned}
-\tag{8}
-$$
+```math
+P_{\mathrm{tip}} = \max(\beta_1,0) \qquad P_{\mathrm{red}} = \max\!\left[0,\min(Q_{25},P_{\mathrm{tip}})\right] \qquad P_{\mathrm{elev}} = \max(P_{\mathrm{tip}},Q_{75})
+```
 
 - **Típica:** inclinação positiva da regressão;
 - **Reduzida:** limitada pelo percentil 25 da média móvel da produção diária;
@@ -257,11 +247,9 @@ $$
 
 ### 9.2 Níveis de consumo
 
-$$
-C_k=\rho_k C,\qquad
-\rho_k\in\{0.80,0.90,1.00,1.10,1.20\}
-\tag{9}
-$$
+```math
+C_k = \rho_k C, \qquad \rho_k \in \{0.80,\,0.90,\,1.00,\,1.10,\,1.20\}
+```
 
 Quando $C=0$, é gerado apenas um cenário de **sem expedição**.
 
@@ -269,17 +257,15 @@ O cruzamento de 3 níveis de produção com 5 níveis de consumo gera até **15 
 
 ### 9.3 Taxa líquida
 
-$$
-L_s=P_s-C_s
-\tag{10}
-$$
+```math
+L_s = P_s - C_s
+```
 
 ### 9.4 Saldo de estoque projetado
 
-$$
-E_s(t)=E_0+(P_s-C_s)t
-\tag{11}
-$$
+```math
+E_s(t) = E_0 + (P_s-C_s)t
+```
 
 onde:
 
@@ -291,48 +277,43 @@ onde:
 
 ### 9.5 Classificação
 
-$$
-\begin{cases}
-E_s(D)<0 & \Rightarrow \text{FALTA}\\
-0\leq E_s(D)\leq E_{max} & \Rightarrow \text{ADEQUADO}\\
-E_s(D)>E_{max} & \Rightarrow \text{EXCESSO}
-\end{cases}
-\tag{12}
-$$
+```math
+E_s(D)<0 \Rightarrow \mathrm{FALTA} \qquad 0\leq E_s(D)\leq E_{\max} \Rightarrow \mathrm{ADEQUADO} \qquad E_s(D)>E_{\max} \Rightarrow \mathrm{EXCESSO}
+```
 
 ### 9.6 Primeiro alerta
 
-$$
-d_{alert}=\begin{cases}
-\left\lceil\dfrac{E_0}{C_s-P_s}\right\rceil, & C_s>P_s\\[6pt]
-\left\lceil\dfrac{E_{max}-E_0}{P_s-C_s}\right\rceil, & P_s>C_s
-\end{cases}
-\tag{13}
-$$
+Se $C_s>P_s$ (risco de falta):
+
+```math
+d_{\mathrm{alert}} = \left\lceil \frac{E_0}{C_s-P_s} \right\rceil
+```
+
+Se $P_s>C_s$ (risco de atingir a capacidade):
+
+```math
+d_{\mathrm{alert}} = \left\lceil \frac{E_{\max}-E_0}{P_s-C_s} \right\rceil
+```
 
 ### 9.7 Faixa operacional de consumo
 
-$$
-P_s+\frac{E_0-E_{max}}{D}\leq C\leq P_s+\frac{E_0}{D}
-\tag{14}
-$$
+```math
+P_s + \frac{E_0-E_{\max}}{D} \leq C \leq P_s + \frac{E_0}{D}
+```
 
 A interseção das faixas obtidas para produção reduzida, típica e elevada é apresentada como **faixa de consumo robusta**.
 
 ### 9.8 Envelope dos cenários
 
-$$
-E_{inf}(t)=\min_s E_s(t),\qquad
-E_{sup}(t)=\max_s E_s(t)
-\tag{15}
-$$
+```math
+E_{\inf}(t) = \min_s E_s(t) \qquad E_{\sup}(t) = \max_s E_s(t)
+```
 
 A linha de referência utiliza produção típica e consumo informado:
 
-$$
-E_{ref}(t)=E_0+(P_{tip}-C)t
-\tag{16}
-$$
+```math
+E_{\mathrm{ref}}(t) = E_0 + (P_{\mathrm{tip}}-C)t
+```
 
 ---
 
@@ -340,10 +321,9 @@ $$
 
 O heatmap resume o atingimento de meta por **dia da semana × centro de trabalho × turno**.
 
-$$
-Atingimento(\%)=\frac{Q_{produzida}}{Q_{meta}}\times100
-\tag{17}
-$$
+```math
+\mathrm{Atingimento}(\%) = \frac{Q_{\mathrm{produzida}}}{Q_{\mathrm{meta}}} \times 100
+```
 
 A produção utiliza preferencialmente `goodQuantity`; na ausência desse valor, utiliza `totalQuantity`.
 
