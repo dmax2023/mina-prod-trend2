@@ -68,12 +68,12 @@ const periodo = (input: { startDate: string; endDate: string }) =>
 async function consultar(
   kind: "Scrap" | "Rework" | "ProductionOee" | "ProductionState",
   d: { startDate: string; endDate: string },
-): Promise<{ data: unknown; error: string | null }> {
+): Promise<{ json: string | null; error: string | null }> {
   const { getActiveMesConnection, fetchMes } = await import("./mes.server");
   const conn = await getActiveMesConnection();
-  if (!conn) return { data: null, error: "Conexão MES não configurada" };
+  if (!conn) return { json: null, error: "Conexão MES não configurada" };
   const r = await fetchMes(conn, kind, d.startDate, d.endDate);
-  return r.ok ? { data: r.json, error: null } : { data: null, error: r.error };
+  return r.ok ? { json: JSON.stringify(r.json), error: null } : { json: null, error: r.error };
 }
 
 export const getScrap = createServerFn({ method: "GET" })
