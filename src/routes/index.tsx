@@ -396,7 +396,7 @@ function DigitalTwin() {
         <div className="panel p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold uppercase tracking-[0.2em]">
-              Estoque acumulado e regressão
+              Projeção do estoque líquido acumulado baseada no balanço entre produção e consumo
             </h2>
             <span className="text-xs text-muted-foreground">{workCenter}</span>
           </div>
