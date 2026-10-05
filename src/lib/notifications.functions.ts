@@ -1,6 +1,41 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { SimulationResult } from "./simulation";
 import type { SimulationBatch } from "./inventorySimulation";
+import { ROTULO_ESTOQUE, ROTULO_PRODUCAO, type AutoSnapshot } from "./autoSimulation";
+
+type Payload = SimulationResult | SimulationBatch | AutoSnapshot;
+
+function isAuto(s: Payload): s is AutoSnapshot {
+  return (s as AutoSnapshot).tipo === "auto";
+}
+
+function montarHtmlAuto(s: AutoSnapshot): string {
+  const row = (k: string, v: string) =>
+    `<tr><th style="text-align:left;padding:6px 12px 6px 0;color:#555;font-weight:normal">${k}</th><td style="padding:6px 0"><b>${v}</b></td></tr>`;
+  const centro = s.workCenter === "todos" ? "Todos os centros" : s.workCenter;
+  return `<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;color:#111;background:#ffffff;padding:24px">
+  <h2 style="margin:0 0 4px">GÊMEO DIGITAL</h2>
+  <p style="margin:0 0 16px">Alerta do <b>Simulador Automático</b> — ${new Date(s.geradoEm).toLocaleString("pt-BR")} — Fonte: MES</p>
+  <h3>Análise</h3>
+  <table style="border-collapse:collapse;font-size:14px">
+    ${row("Centro de trabalho", centro)}
+    ${row("Status", `${ROTULO_ESTOQUE[s.estadoEstoque]}; ${ROTULO_PRODUCAO[s.estadoProducao]}`)}
+    ${row("Estoque atual", `${fmt(s.estoqueAtual)} un.`)}
+    ${row("Estoque mínimo", `${fmt(s.estoqueMinimo)} un.`)}
+    ${row("Estoque máximo", `${fmt(s.estoqueMaximo)} un.`)}
+    ${row("Produção média 7 dias", `${fmt(s.producaoRef)} un./dia`)}
+    ${row("Faixa de produção", `${fmt(s.producaoMin)} – ${fmt(s.producaoMax)} un./dia`)}
+    ${row("Produção atual", s.producaoAtual === null ? "—" : `${fmt(s.producaoAtual)} un./dia`)}
+    ${row("Consumo", s.consumoAtivo ? (s.consumoRef === null ? "Dados insuficientes" : `${fmt(s.consumoRef)} un./dia`) : "Desabilitado")}
+    ${row("Saldo líquido", `${fmt(s.saldoLiquido)} un./dia`)}
+    ${row("Horizonte", `${fmt(s.horizonte)} dias`)}
+    ${row("Evento previsto", s.evento)}
+  </table>
+  <h3>Recomendação</h3>
+  <p>${s.recomendacao}</p>
+  <p style="color:#777;font-size:12px">O Gêmeo Digital apenas monitora, projeta e recomenda — nenhuma ação é executada no processo real.</p>
+</body></html>`;
+}
 
 type EnvioResultado = {
   ok: boolean;
@@ -61,7 +96,7 @@ function montarHtml(s: SimulationResult): string {
 </body></html>`;
 }
 
-function isSimulationBatch(s: SimulationResult | SimulationBatch): s is SimulationBatch {
+function isSimulationBatch(s: Payload): s is SimulationBatch {
   return "cenarios" in s && Array.isArray(s.cenarios);
 }
 
@@ -131,10 +166,12 @@ function montarHtmlCenarios(s: SimulationBatch): string {
 }
 
 export const enviarSimulacao = createServerFn({ method: "POST" })
-  .inputValidator((input: { simulation: SimulationResult | SimulationBatch }) => input)
+  .inputValidator((input: { simulation: Payload }) => input)
   .handler(async ({ data }): Promise<EnvioResultado> => {
     const simulation = data.simulation;
-    const valida = simulation && (isSimulationBatch(simulation)
+    const valida = simulation && (isAuto(simulation)
+      ? simulation.trajetoria.length > 0 && Number.isFinite(simulation.producaoRef)
+      : isSimulationBatch(simulation)
       ? simulation.cenarios.length > 0 && Number.isFinite(simulation.dia)
       : Number.isFinite(simulation.forecast?.previsaoDiaConsulta));
     if (!valida) {
@@ -165,10 +202,14 @@ export const enviarSimulacao = createServerFn({ method: "POST" })
     const from =
       process.env["RESEND_FROM_EMAIL"] ??
       "Digital Twin <simulacoes@forecastingdigitaltwin.com.br>";
-    const html = isSimulationBatch(simulation)
-      ? montarHtmlCenarios(simulation)
-      : montarHtml(simulation);
-    const subject = "Resultado da Simulação — Digital Twin";
+    const html = isAuto(simulation)
+      ? montarHtmlAuto(simulation)
+      : isSimulationBatch(simulation)
+        ? montarHtmlCenarios(simulation)
+        : montarHtml(simulation);
+    const subject = isAuto(simulation)
+      ? `[GD] Alerta de projeção de estoque — ${simulation.workCenter === "todos" ? "Todos os centros" : simulation.workCenter}`
+      : "Resultado da Simulação — Digital Twin";
 
     let enviados = 0;
     let falhas = 0;
@@ -215,7 +256,7 @@ export const enviarSimulacao = createServerFn({ method: "POST" })
       }
 
       await supabaseAdmin.from("notification_logs").insert({
-        simulation_ref: isSimulationBatch(simulation) ? simulation.geradoEm : simulation.generatedAt,
+        simulation_ref: isAuto(simulation) || isSimulationBatch(simulation) ? simulation.geradoEm : simulation.generatedAt,
         recipient: r.email,
         status,
         error_message: errorMessage,
