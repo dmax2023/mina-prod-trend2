@@ -38,6 +38,7 @@ import { montarSimulacao } from "@/lib/simulation";
 import { enviarSimulacao } from "@/lib/notifications.functions";
 import { HeatmapProducao } from "@/components/HeatmapProducao";
 import { InventorySimulator } from "@/components/inventory-simulator/InventorySimulator";
+import { AutoSimulator } from "@/components/AutoSimulator";
 import { DestinatariosSimulacao } from "@/components/DestinatariosSimulacao";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -524,6 +525,13 @@ function DigitalTwin() {
         workCenterAtual={workCenter}
         dias={dias}
         dataAtualizadaEm={dataUpdatedAt}
+      />
+
+      <AutoSimulator
+        key={`auto-${connectionId ?? "sem-conexao"}`}
+        records={records}
+        workCenters={workCenters}
+        workCenterAtual={workCenter}
       />
 
       <DestinatariosSimulacao />
