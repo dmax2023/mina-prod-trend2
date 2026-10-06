@@ -380,10 +380,10 @@ export function AutoSimulator({
                         labelFormatter={(l) => (l === 0 ? "Hoje" : `Dia ${l}`)}
                       />
                       <ReferenceLine x={0} stroke="var(--foreground)" label={{ value: "Hoje", fontSize: 11, fill: "var(--foreground)", position: "top" }} />
-                      <ReferenceLine y={snap.estoqueMaximo} stroke="var(--destructive)" strokeDasharray="6 4" label={{ value: "Máximo", fontSize: 11, fill: "var(--destructive)", position: "insideTopRight" }} />
+                      <ReferenceLine y={snap.estoqueMaximo} stroke="var(--destructive)" strokeDasharray="6 4" label={{ value: "Máximo", fontSize: 11, fill: "var(--destructive)", position: "insideTopLeft" }} />
                       <ReferenceLine y={snap.preAlertaSuperior} stroke="var(--chart-3)" strokeDasharray="2 4" label={{ value: "Próximo do máximo", fontSize: 10, fill: "var(--chart-3)", position: "insideBottomRight" }} />
                       <ReferenceLine y={snap.preAlertaInferior} stroke="var(--chart-3)" strokeDasharray="2 4" label={{ value: "Próximo do mínimo", fontSize: 10, fill: "var(--chart-3)", position: "insideTopRight" }} />
-                      <ReferenceLine y={snap.estoqueMinimo} stroke="var(--destructive)" strokeDasharray="6 4" label={{ value: "Mínimo", fontSize: 11, fill: "var(--destructive)", position: "insideBottomRight" }} />
+                      <ReferenceLine y={snap.estoqueMinimo} stroke="var(--destructive)" strokeDasharray="6 4" label={{ value: "Mínimo", fontSize: 11, fill: "var(--destructive)", position: "insideBottomLeft" }} />
                       <Line type="monotone" dataKey="estoque" name="Estoque projetado" stroke="var(--success)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
