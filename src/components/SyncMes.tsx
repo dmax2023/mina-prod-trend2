@@ -4,10 +4,13 @@ export type SyncInfo = {
   eventTimestamp: string | null;
   amostras: number[];
   erro: string | null;
+  apiMs?: number;
+  relogio?: boolean;
 };
 
 const D_RT = 1000;
 
+// Percentil pelo método "nearest-rank" (mesmo método em todas as atualizações).
 function pct(v: number[], p: number) {
   if (!v.length) return null;
   const s = [...v].sort((a, b) => a - b);
@@ -16,6 +19,13 @@ function pct(v: number[], p: number) {
 const ms = (v: number | null) =>
   v === null ? "—" : v < 1000 ? `${Math.round(v)} ms` : `${(v / 1000).toFixed(2)} s`;
 const hora = (s: string | null) => (s ? new Date(s).toLocaleTimeString("pt-BR") : "—");
+
+function maturidade(n: number) {
+  if (n === 0) return "Sem amostras";
+  if (n < 10) return "Amostragem inicial";
+  if (n < 30) return "Amostra reduzida";
+  return "Amostra estabelecida";
+}
 
 export function SyncMes({
   conexao,
@@ -27,30 +37,43 @@ export function SyncMes({
   semConexao: boolean;
 }) {
   const a = info?.amostras ?? [];
-  const latencia =
+  const dtr =
     info?.eventTimestamp ? Date.parse(info.receivedAt) - Date.parse(info.eventTimestamp) : null;
   const idade = info?.eventTimestamp ? Date.now() - Date.parse(info.eventTimestamp) : null;
   const dentro = a.length ? (a.filter((x) => x <= D_RT).length / a.length) * 100 : null;
+  const p50 = pct(a, 50);
+  const comparacao =
+    dtr === null || p50 === null
+      ? "—"
+      : dtr > p50
+        ? `+${ms(dtr - p50)} acima`
+        : dtr < p50
+          ? `${ms(p50 - dtr)} abaixo`
+          : "igual";
 
   let status: { txt: string; cls: string };
   if (semConexao) status = { txt: "CONEXÃO MES NÃO CONFIGURADA", cls: "bg-destructive" };
   else if (info?.erro) status = { txt: "FALHA NA CONEXÃO MES", cls: "bg-destructive" };
-  else if (latencia === null) status = { txt: "TIMESTAMP INDISPONÍVEL", cls: "bg-muted-foreground" };
-  else if (latencia <= D_RT) status = { txt: `SINCRONIZADO — ${ms(latencia)}`, cls: "bg-success" };
-  else status = { txt: `ATRASO — ${ms(latencia)}`, cls: "bg-destructive" };
+  else if (info?.relogio)
+    status = { txt: "POSSÍVEL DIVERGÊNCIA DE RELÓGIO/TIMEZONE", cls: "bg-destructive" };
+  else if (dtr === null) status = { txt: "TIMESTAMP INDISPONÍVEL", cls: "bg-muted-foreground" };
+  else if (dtr <= D_RT) status = { txt: `SINCRONIZADO — ${ms(dtr)}`, cls: "bg-success" };
+  else status = { txt: `ATRASO — ${ms(dtr)}`, cls: "bg-destructive" };
 
   const itens: [string, string][] = [
     ["Conexão ativa", conexao ?? "Nenhuma"],
     ["Último evento MES", hora(info?.eventTimestamp ?? null)],
     ["Recebido pelo gêmeo", hora(info?.receivedAt ?? null)],
-    ["Latência E2E", ms(latencia)],
+    ["D_TR MES → GD", ms(dtr)],
     ["Idade do dado", ms(idade)],
-    ["P50", ms(pct(a, 50))],
+    ["Tempo API", ms(info?.apiMs ?? null)],
+    ["P50", ms(p50)],
     ["P95", ms(pct(a, 95))],
     ["P99", ms(pct(a, 99))],
     ["Máximo", ms(a.length ? Math.max(...a) : null)],
+    ["D_TR atual vs P50", comparacao],
     ["Eventos ≤ 1 s", dentro === null ? "—" : `${dentro.toFixed(1)}%`],
-    ["Amostras", String(a.length)],
+    ["Amostras válidas", `${a.length} — ${maturidade(a.length)}`],
   ];
 
   return (
@@ -73,6 +96,14 @@ export function SyncMes({
             </div>
           ))}
         </dl>
+        {!semConexao && !info?.erro && dtr === null && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            D_TR indisponível: API não fornece timestamp de origem. O endpoint ProductionCount
+            retorna produção agregada por dia e turno (campo "date" sem hora); o horário da
+            consulta não é usado como horário do evento. "Tempo API" mede só a duração da
+            requisição, não a sincronização.
+          </p>
+        )}
       </div>
     </section>
   );
