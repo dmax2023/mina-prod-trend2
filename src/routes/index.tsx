@@ -106,7 +106,7 @@ function DigitalTwin() {
   const amostras = useRef<number[]>([]);
   const vistos = useRef(new Set<string>());
   const [sync, setSync] = useState<SyncInfo | null>(null);
-...
+  useEffect(() => {
     amostras.current = [];
     vistos.current = new Set();
     setSync(null);
