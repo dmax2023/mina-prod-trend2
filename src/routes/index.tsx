@@ -104,10 +104,11 @@ function DigitalTwin() {
   });
   const connectionId = conexao?.id ?? null;
   const amostras = useRef<number[]>([]);
+  const vistos = useRef(new Set<string>());
   const [sync, setSync] = useState<SyncInfo | null>(null);
-
   useEffect(() => {
     amostras.current = [];
+    vistos.current = new Set();
     setSync(null);
   }, [connectionId]);
 
@@ -127,14 +128,21 @@ function DigitalTwin() {
       if (snap.error === "Conexão MES alterada") {
         void qc.invalidateQueries({ queryKey: ["mes-active-connection"] });
       }
-      // Latência E2E somente quando o MES fornece eventTimestamp (nunca inventado).
+      // D_TR MES → GD somente com timestamp de origem real (nunca inventado).
+      // 1 evento novo = 1 amostra; chave = centro + timestamp MES + quantidade.
       const recebido = Date.parse(snap.receivedAt);
-      const eventos = snap.records
-        .map((r) => (r.eventTimestamp ? Date.parse(r.eventTimestamp) : NaN))
-        .filter(Number.isFinite);
-      const ultimoEvento = eventos.length ? Math.max(...eventos) : null;
-      if (ultimoEvento !== null) {
-        amostras.current = [...amostras.current, recebido - ultimoEvento].slice(-500);
+      let ultimoEvento: number | null = null;
+      let invalidas = 0;
+      for (const r of snap.records) {
+        const t = r.eventTimestamp ? Date.parse(r.eventTimestamp) : NaN;
+        if (!Number.isFinite(t)) continue;
+        ultimoEvento = Math.max(ultimoEvento ?? t, t);
+        const chave = `${r.workCenter}|${t}|${r.totalQuantity}`;
+        if (vistos.current.has(chave)) continue;
+        vistos.current.add(chave);
+        const dtr = recebido - t;
+        if (dtr < 0) invalidas++;
+        else amostras.current = [...amostras.current, dtr].slice(-1000);
       }
       setSync({
         requestedAt: snap.requestedAt,
@@ -142,6 +150,8 @@ function DigitalTwin() {
         eventTimestamp: ultimoEvento !== null ? new Date(ultimoEvento).toISOString() : null,
         amostras: amostras.current,
         erro: snap.error,
+        apiMs: Date.parse(snap.receivedAt) - Date.parse(snap.requestedAt),
+        relogio: invalidas > 0,
       });
       if (snap.error || !temBase) return snap;
       return { ...snap, records: reconciliar(prev!.records, snap.records, desde) };
