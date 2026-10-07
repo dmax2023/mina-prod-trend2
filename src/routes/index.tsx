@@ -286,6 +286,7 @@ function DigitalTwin() {
             className={`size-4 text-primary ${isFetching ? "animate-spin" : "opacity-40"}`}
           />
         </div>
+        </div>
       </header>
 
       <SyncMes conexao={conexao?.name ?? null} info={sync} semConexao={semConexao} />
