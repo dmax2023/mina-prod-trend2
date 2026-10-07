@@ -263,6 +263,8 @@ function DigitalTwin() {
             Os dados alimentam o modelo de regressão linear e a previsão de estoque acumulado.
           </p>
         </div>
+        <div className="flex items-center gap-3">
+        <LanguageSwitch />
         <div className="panel glow flex items-center gap-3 px-4 py-3">
           <span
             className={`live-dot inline-block size-2.5 rounded-full ${
@@ -283,6 +285,7 @@ function DigitalTwin() {
           <RefreshCw
             className={`size-4 text-primary ${isFetching ? "animate-spin" : "opacity-40"}`}
           />
+        </div>
         </div>
       </header>
 
