@@ -4,3 +4,4 @@
 - [x] Adicionar o envio do snapshot do simulador antes da metodologia.
 - [x] Validar compilação e funcionamento visual dos dois fluxos de envio.
 - [x] Renomear o bloco do heatmap para "Mapa de Calor da Produção".
+- [x] Renomear o bloco do simulador de cenários para "Simulador manual de cenários de projeção de estoque".
