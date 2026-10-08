@@ -93,7 +93,7 @@ export function InventorySimulator({
       <div className="panel space-y-6 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-[0.2em]">
-            Simulador de cenários de projeção de estoque
+            Simulador manual de cenários de projeção de estoque
           </h2>
           {dataAtualizadaEm ? (
             <span className="text-xs text-muted-foreground">
