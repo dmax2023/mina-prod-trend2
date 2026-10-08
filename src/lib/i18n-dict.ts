@@ -65,7 +65,8 @@ export const PT_EN: Record<string, string> = {
   "unidades —": "units —",
   "Enviar simulação": "Send simulation",
   "Enviando...": "Sending...",
-  "Simulador de cenários de projeção de estoque": "Inventory projection scenario simulator",
+  "Simulador manual de cenários de projeção de estoque":
+    "Manual inventory projection scenario simulator",
   "Dados atualizados às": "Data updated at",
   "Prever estoque no dia": "Forecast inventory on day",
   "Ex.: 30 = calcular quanto estoque haverá exatamente no 30º dia.":
