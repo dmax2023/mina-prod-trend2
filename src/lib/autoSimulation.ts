@@ -2,6 +2,7 @@
 // Reutiliza a série diária de prepararSerie (mesma fonte do gráfico principal) e o mesmo
 // balanço de estoque do simulador manual: E(t+1) = E(t) + P - C.
 import type { SeriePonto } from "./twin-math";
+import { recomendarAjuste } from "./autoGuidance";
 
 export type AutoConfig = {
   workCenter: string;
@@ -66,8 +67,6 @@ export function validarConfig(c: AutoConfig): string | null {
   return null;
 }
 
-const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(v);
-
 /** Primeiro dia (1..H) em que a condição é verdadeira; 0 se já for verdadeira hoje. */
 function primeiroDia(traj: { dia: number; estoque: number }[], cond: (e: number) => boolean) {
   const p = traj.find((t) => cond(t.estoque));
@@ -83,7 +82,8 @@ export function calcularProjecaoAutomatica(serie: SeriePonto[], c: AutoConfig): 
   const producaoRef = ultimos7.reduce((a, p) => a + p.producao, 0) / ultimos7.length;
   const producaoMin = (c.pctProducaoMin / 100) * producaoRef;
   const producaoMax = (c.pctProducaoMax / 100) * producaoRef;
-  const ultimo = validos[validos.length - 1]!;
+  const ultimo = validos[validos.length - 1];
+  if (!ultimo) return null;
   const producaoAtual = ultimo.producao;
 
   // A conexão MES ativa não fornece saídas reais de estoque: consumo nunca é inventado.
@@ -98,7 +98,7 @@ export function calcularProjecaoAutomatica(serie: SeriePonto[], c: AutoConfig): 
 
   const trajetoria = [{ dia: 0, estoque: c.estoqueAtual }];
   for (let t = 1; t <= c.horizonte; t++) {
-    trajetoria.push({ dia: t, estoque: trajetoria[t - 1]!.estoque + saldoLiquido });
+    trajetoria.push({ dia: t, estoque: (trajetoria[t - 1]?.estoque ?? c.estoqueAtual) + saldoLiquido });
   }
 
   const dMax = primeiroDia(trajetoria, (e) => e > eMax);
@@ -130,29 +130,7 @@ export function calcularProjecaoAutomatica(serie: SeriePonto[], c: AutoConfig): 
   const estadoProducao: EstadoProducao =
     producaoAtual < producaoMin ? "ABAIXO" : producaoAtual > producaoMax ? "ACIMA" : "ADEQUADA";
 
-  const recs: string[] = [];
-  if (estadoEstoque === "RISCO_SUPERIOR" || estadoEstoque === "PROXIMO_MAXIMO") {
-    recs.push(
-      `${evento}. Mantido o ritmo de ${fmt(saldoLiquido)} un./dia, avalie reduzir a produção ou aumentar as saídas.`,
-    );
-  } else if (estadoEstoque === "RISCO_INFERIOR" || estadoEstoque === "PROXIMO_MINIMO") {
-    recs.push(
-      producaoAtual >= producaoMax
-        ? `${evento}. A produção já está no máximo da faixa (${fmt(producaoMax)} un./dia); avalie reduzir as saídas.`
-        : `${evento}. Avalie aumentar a produção em direção a ${fmt(producaoMax)} un./dia.`,
-    );
-  } else {
-    recs.push(`Estoque dentro da faixa segura durante os próximos ${c.horizonte} dias.`);
-  }
-  if (estadoProducao === "ABAIXO") {
-    recs.push(
-      `A produção atual está ${fmt(((producaoMin - producaoAtual) / producaoMin) * 100)}% abaixo da faixa mínima.`,
-    );
-  } else if (estadoProducao === "ACIMA") {
-    recs.push(`A produção atual está acima da faixa máxima (${fmt(producaoMax)} un./dia).`);
-  }
-
-  return {
+  const snapshot: AutoSnapshot = {
     tipo: "auto",
     geradoEm: new Date().toISOString(),
     workCenter: c.workCenter,
@@ -176,8 +154,10 @@ export function calcularProjecaoAutomatica(serie: SeriePonto[], c: AutoConfig): 
     estadoProducao,
     diaEvento,
     evento,
-    recomendacao: recs.join(" "),
+    recomendacao: "",
   };
+  snapshot.recomendacao = recomendarAjuste(snapshot);
+  return snapshot;
 }
 
 export const ROTULO_ESTOQUE: Record<EstadoEstoque, string> = {
