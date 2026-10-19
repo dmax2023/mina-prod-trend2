@@ -1,5 +1,8 @@
 # Roadmap
 
+- [ ] Escrever todos os corpos dos e-mails de simulação em inglês.
+- [ ] Acrescentar recomendações automáticas quantitativas com prazos, justificativas e limitações; validar cálculos e tela.
+
 - [x] Posicionar o Heatmap de produção antes do gráfico de estoque acumulado e regressão.
 - [x] Adicionar o envio do snapshot do simulador antes da metodologia.
 - [x] Validar compilação e funcionamento visual dos dois fluxos de envio.
