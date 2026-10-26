@@ -1,732 +1,469 @@
-# Gêmeo Digital de Produção e Estoque — MINA MES
+# MES-Integrated Digital Twin for Inventory Projection and Scenario Analysis
 
-> Gêmeo Digital orientado a dados para monitoramento da produção, análise de tendência, projeção de estoque e simulação de cenários, integrado ao **MINA MES** por API REST.
+**Data-Driven MES-Integrated Digital Twin for Inventory Projection and Scenario Analysis**
 
-**Aplicação web:** https://mina-prod-trend.lovable.app/  
-**Repositório:** https://github.com/dmax2023/mina-prod-trend
+> A digital manufacturing research prototype that integrates production data from a Manufacturing Execution System (MES), visualization, inventory projection, scenario simulation, and alerts, following the functional organization of ISO 23247.
 
----
+**Web application:** https://mina-prod-trend.lovable.app/  
+**Current public repository:** https://github.com/dmax2023/mina-prod-trend2  
+**Case study:** industrial mineral water bottling line, Recife Metropolitan Area, Pernambuco, Brazil.  
+**Status:** functional decision-support prototype; **does not control equipment** and **has not been validated for predictive accuracy against observed inventory levels**.
 
-## 1. Visão geral
+> **Access and data note:** When the application is opened without a configured MES connection, indicators may display zero values and some results may be unavailable. This does not represent the experimental dataset reported in the paper. The study used industrial records obtained through an authorized connection.
 
-Este projeto implementa um **Gêmeo Digital (GD) de manufatura** que transforma dados de produção coletados no chão de fábrica em informações para monitoramento, análise e apoio à decisão. A solução foi estruturada segundo a lógica funcional da **ISO 23247**, conectando o elemento físico observado, o sistema MES, a camada de aquisição de dados, o núcleo analítico do gêmeo e a interface do usuário.
+## Table of Contents
 
-O fluxo principal é:
+1. [Overview and Scope](#1-overview-and-scope)
+2. [Industrial Case Study and Architecture](#2-industrial-case-study-and-architecture)
+3. [Features and Modules](#3-features-and-modules)
+4. [MINA MES Integration](#4-mina-mes-integration)
+5. [Synchronization and Latency](#5-synchronization-and-latency)
+6. [Mathematical Models](#6-mathematical-models)
+7. [Manual Simulator](#7-manual-simulator)
+8. [Automatic Simulator and Alerts](#8-automatic-simulator-and-alerts)
+9. [Methodology and Experimental Evaluation](#9-methodology-and-experimental-evaluation)
+10. [Experimental Results](#10-experimental-results)
+11. [How to Use](#11-how-to-use)
+12. [Technologies and Installation](#12-technologies-and-installation)
+13. [Reproducibility, Security, and Limitations](#13-reproducibility-security-and-limitations)
+14. [Future Work, References, and License](#14-future-work-references-and-license)
+
+## 1. Overview and Scope
+
+This project proposes a data-driven **Digital Twin (DT)**, accessible through a web browser, to analyze operational inventory conditions using real production records. A bottling line is monitored by sensors and IoT devices; records are made available through the **MINA MES** and retrieved by the application via a REST API. The DT aggregates time series, provides visualizations, calculates projected inventory trajectories, and generates classifications and alerts.
+
+The main features include:
+
+- periodic retrieval of MES production data and selection of work centers (WCs);
+- indicators, time-series charts, linear regression, and a production target achievement heatmap;
+- a **manual simulator** comparing up to 15 production × consumption scenarios;
+- an **automatic simulator** for periodic projections and identification of preventive and risk ranges;
+- settings for capacity, initial inventory, projection horizon, and consumption;
+- emailing of results and notifications to registered recipients;
+- experimental implementation verification and sensitivity analysis documented in the scientific study.
+
+**Scope limitation:** Results are conditional projections based on the specified parameters. The DT does not directly control the conveyor, PLC, or production system. Decisions and physical changes remain the operator's responsibility.
+
+## 2. Industrial Case Study and Architecture
+
+### 2.1 Case Study
+
+The study examined a Brazilian mineral water manufacturer bottling **20 L polycarbonate water bottles (Line 1)** and **10 L bottles (Line 3)**. Between January 2025 and October 2026, the paper reports an average daily production of approximately **10,000 20 L bottles** on Line 1 and **7,000 10 L bottles** on Line 3. These figures characterize the case study; they are not demonstration data automatically available to every website visitor.
+
+### 2.2 Functional Flow
 
 ```mermaid
 flowchart LR
-    A[Produto na esteira] --> B[Sensor óptico]
-    B --> C[Dispositivo IoT]
-    C -->|Wi-Fi| D[MINA MES]
-    D -->|API REST / JSON| E[Camada de servidor]
-    E --> F[Pré-processamento]
-    F --> G[Modelo analítico]
-    G --> H[Simulação de cenários]
-    H --> I[Dashboard / Apoio à decisão]
-    I --> J[Notificações por e-mail]
+    A[Bottle on conveyor] --> B[Through-beam optical sensor]
+    B --> C[IoT device]
+    C -->|Wi-Fi| D[MINA MES / Work center]
+    D -->|ProductionCount / REST API| E[Web application / Digital Twin]
+    E --> F[Processing and models]
+    F --> G[Manual simulator]
+    F --> H[Automatic simulator]
+    G --> I[Results and analysis]
+    H --> I
+    I --> J[Alerts / notifications]
 ```
 
-O projeto **não executa controle automático da máquina**. As recomendações são informacionais e a decisão permanece com o usuário.
+### 2.3 Functional Mapping to ISO 23247
 
----
+ISO 23247 is used as a **reference for functional organization**, without claiming certification of full compliance.
 
-## 2. Objetivos do Gêmeo Digital
-
-A solução foi criada para:
-
-- acompanhar a produção por **centro de trabalho, dia e turno**;
-- sincronizar dados do MES de forma periódica;
-- identificar padrões de atingimento de metas por meio de **heatmap**;
-- estimar a tendência produtiva por regressão linear;
-- projetar possíveis saldos de estoque a partir de produção, consumo e capacidade;
-- comparar condições de **falta, adequação e excesso**;
-- identificar o primeiro alerta de falta ou atingimento da capacidade;
-- calcular uma **faixa robusta de consumo**;
-- registrar destinatários e encaminhar resultados de simulação por e-mail;
-- apoiar decisões sem exigir que o usuário manipule diretamente modelos matemáticos.
-
-### Valor para micro e pequenas empresas
-
-A proposta busca reduzir a barreira de uso de análise industrial ao reutilizar dados já disponíveis em um MES e apresentar os resultados em uma aplicação web. Em empresas que já dispõem de sensoriamento, conectividade e uma API de produção, o GD pode apoiar planejamento de estoque, identificação antecipada de excesso/falta, comparação de hipóteses operacionais e compartilhamento de resultados com gestores sem exigir uma infraestrutura analítica separada para cada usuário.
-
----
-
-## 3. Arquitetura baseada na ISO 23247
-
-A solução pode ser relacionada às entidades funcionais da ISO 23247 da seguinte forma:
-
-| Entidade / camada | Implementação no projeto |
+| Domain / function | Representation in this solution |
 |---|---|
-| **Observable Manufacturing Elements** | linha de produção, produto, sensor óptico, centro de trabalho |
-| **Data Collection / Device Communication** | dispositivo IoT, Wi-Fi, MINA MES, API REST |
-| **Digital Twin Core** | pré-processamento, série temporal, regressão, simulação, classificação e alertas |
-| **User Entity** | dashboard, parâmetros, gráficos, tabelas, heatmap e envio de simulações |
-| **Cross-System Functions** | autenticação por API key, validação, persistência, gateway de e-mail e segurança de credenciais |
+| *Observable Manufacturing Domain* | Bottling conveyor, bottles, counting sensor, and WCs |
+| *Device Communication Domain* | Signal acquisition, IoT, Wi-Fi, MES, and REST interface |
+| *Digital Twin Domain* | Processing, time series, regression, simulation, classification, and alerts |
+| *User Domain* | Dashboard, parameter controls, charts, tables, and notifications |
+| Cross-cutting functions | Data translation and quality, authentication, credential protection, and traceability |
 
----
+## 3. Features and Modules
 
-## 4. Tecnologias e frameworks
-
-| Categoria | Tecnologia | Papel no projeto |
+| Module | Functions | Requirements |
 |---|---|---|
-| Plataforma de desenvolvimento | **Lovable** | desenvolvimento e publicação da aplicação web |
-| Frontend / Full-stack | **React 19 + TypeScript** | interface e lógica tipada |
-| Framework | **TanStack Start** | funções server-side e aplicação full-stack |
-| Rotas | **TanStack Router** | roteamento da aplicação |
-| Sincronização e cache | **TanStack React Query** | consultas periódicas, cache e revalidação dos dados do MES |
-| UI | **Radix UI** | componentes acessíveis e reutilizáveis |
-| Estilização | **Tailwind CSS** | layout responsivo e identidade visual |
-| Gráficos | **Recharts** | séries temporais, regressão e envelope de cenários |
-| Validação | **Zod** | validação de entradas e payloads de funções de servidor |
-| Banco de dados | **Supabase / PostgreSQL** | conexões MES, destinatários e logs de notificação |
-| E-mail | **Resend** | envio transacional de resultados |
-| Gateway externo | **Lovable Connector Gateway** | mediação segura da chamada ao Resend |
-| Build | **Vite** | desenvolvimento e empacotamento |
-| Runtime server | **Nitro** | execução das funções no servidor |
-| Versionamento | **Git / GitHub** | rastreabilidade do código-fonte |
-| Qualidade de código | **ESLint + Prettier** | padronização, lint e formatação |
+| MES monitoring | Cumulative production, WCs, observed window, updates, and connection status | Requires an active MES connection |
+| Heatmap | Target achievement by weekday, WC, and shift | Depends on available targets and production data |
+| Trend / regression | Historical visualization, smoothing, and linear trend | Depends on valid records |
+| Manual simulator | Reduced/typical/increased production × consumption; final inventory; first alert | Requires user-specified parameters |
+| Automatic simulator | Periodic projection, minimum/maximum limits, and preventive ranges | Requires parameters and, for historical consumption, outflow records |
+| Notifications | Recipient registration, simulation emails, and alerts | Requires configured email delivery and enabled recipients |
+| API connections | MES source registration, activation, and verification | Requires a valid endpoint and authorization |
 
----
+### 3.1 Cumulative Production Versus Physical Inventory
 
-## 5. Integração com o MINA MES
+**Cumulative production is not necessarily equivalent to physical inventory.** A legacy visualization variable may be named `estoque` even though it represents the sum of production quantities. The **projected inventory balance** results from explicitly combining initial inventory, production inflows, and consumption outflows. Cumulative production must not be interpreted as measured inventory.
 
-### 5.1 Fonte de dados
+## 4. MINA MES Integration
 
-A principal fonte do Gêmeo Digital é o endpoint **`ProductionCount`**. O projeto também possui camada de integração preparada para consultar endpoints de **Scrap**, **Rework**, **ProductionOee** e **ProductionState**, embora o fluxo principal atual utilize `ProductionCount`.
+The primary production data source is the MINA MES **`ProductionCount`** endpoint. Earlier documentation also describes integration structures for `Scrap`, `Rework`, `ProductionOee`, and `ProductionState`; these endpoints were not considered active data sources in the experiment reported in the paper.
 
-Cada registro de produção pode conter, entre outros atributos:
+A record may include date, shift, WC, product, unit of measure, produced quantity, good quantity, and production target, depending on the fields exposed by the API. The application supports registration of a connection name, base URL, endpoints, and access key, with one active source selected at a time.
 
-- data;
-- turno;
-- centro de trabalho;
-- produto;
-- unidade de medida;
-- quantidade boa;
-- quantidade total;
-- meta de produção;
-- timestamp do evento, quando fornecido pelo MES.
+The data-processing flow documented in the project is:
 
-### 5.2 Cadastro de conexão
+1. authenticate and query the active connection;
+2. retrieve historical and incremental records;
+3. validate, filter, and aggregate data by period and WC;
+4. update application cache/state and visualizations;
+5. calculate indicators and simulations using the available data.
 
-A aplicação possui um módulo **Conexões de API**. Cada conexão contém:
+A logical reconciliation key described in the project documentation combines **date + shift + WC + product**. Its actual use should be checked in the deployed version whenever the API changes.
 
-- nome;
-- URL base;
-- lista de endpoints;
-- token/API key;
-- situação ativa/inativa;
-- data da última sincronização.
+## 5. Synchronization and Latency
 
-Somente **uma conexão MES pode permanecer ativa por vez**. O token é recuperado apenas no servidor e aparece mascarado na interface.
+The public interface inspected in October 2026 indicates **1-second polling** for the active MES connection. This is a *configured query interval*, not evidence that every physical event reaches the interface within one second.
 
-### 5.3 Estratégia de atualização
+The observed `ProductionCount` endpoint provides records aggregated by day/shift and does not necessarily expose a source `eventTimestamp` with sufficient time resolution. In this situation, the dashboard shows **TIMESTAMP UNAVAILABLE**, and end-to-end latency between the physical event and the DT cannot be validly computed. API response time is not a substitute for this measurement.
 
-O fluxo usa:
-
-1. carga histórica inicial;
-2. consultas incrementais sobre o período mais recente;
-3. reconciliação dos registros por chave composta;
-4. atualização do cache da aplicação;
-5. recomputação dos indicadores e modelos.
-
-A chave lógica usada para reconciliação combina:
-
-`data + turno + centro de trabalho + produto`.
-
----
-
-## 6. Sincronização e soft real-time
-
-A versão mais recente do código-fonte define polling de **1 s** (`POLL_MS = 1000`) e um prazo de referência de **1 s** para avaliação da latência ponta a ponta (`D_RT = 1000`). A latência somente é calculada quando o MES fornece um `eventTimestamp` real; o sistema não cria um timestamp artificial para simular desempenho.
-
-> **Nota de versão:** no momento da elaboração deste README, a implantação pública ainda exibia atualização de 5 s. O código anexado contém a configuração de 1 s. Para manter documentação e implantação coerentes, publique a revisão mais recente antes de declarar 1 s no ambiente de produção.
-
-### Latência ponta a ponta
-
-> **Compatibilidade com GitHub:** as expressões abaixo usam blocos `math`, formato suportado pelo renderizador MathJax do GitHub. As fórmulas foram mantidas em uma única linha sempre que possível para evitar quebras e alinhamentos verticais indesejados.
+When a reliable source timestamp is available, latency may be defined as:
 
 ```math
-L_i = t_i^{\mathrm{DT}} - t_i^{\mathrm{evento}}
+L_i = t_i^{\mathrm{DT}} - t_i^{\mathrm{event}}
 ```
 
-onde:
-
-- $t^{evento}_i$: instante registrado para o evento de produção;
-- $t^{DT}_i$: instante de recebimento pelo Gêmeo Digital;
-- $L_i$: latência ponta a ponta do evento $i$.
-
-A condição de conformidade é:
+For a reference threshold `D_RT`:
 
 ```math
-L_i \leq D_{\mathrm{RT}}
+C_{\mathrm{RT}} = \frac{100}{N} \sum_{i=1}^{N} \mathbb{I}(L_i \leq D_{\mathrm{RT}})
 ```
 
-A aplicação mantém até 500 amostras e apresenta **P50, P95, P99, máximo e percentual de eventos dentro de 1 s**.
+The interface provides places for indicators such as P50, P95, P99, maximum latency, and the percentage of events within the threshold, but **these must not be treated as measured results when source timestamps are unavailable**. In that situation, the more appropriate term is *periodic synchronization* or *near-real-time*.
 
-```math
-C_{\mathrm{RT}} = \frac{100}{N} \sum_{i=1}^{N} \mathbb{I}\!\left(L_i \leq D_{\mathrm{RT}}\right)
-```
+## 6. Mathematical Models
 
-A denominação **soft real-time** deve ser usada somente quando a latência puder ser efetivamente medida. Sem `eventTimestamp`, a interpretação correta é sincronização periódica / near-real-time.
+### 6.1 Daily and Cumulative Production
 
----
-
-## 7. Pré-processamento dos dados
-
-O pré-processamento ocorre antes da modelagem:
-
-1. filtra registros válidos e o centro de trabalho selecionado;
-2. converte quantidades para valores numéricos;
-3. agrega a produção por dia;
-4. ordena os registros cronologicamente;
-5. completa datas ausentes com produção igual a zero;
-6. seleciona a janela histórica solicitada pelo usuário;
-7. calcula a produção acumulada e séries suavizadas.
-
-### Produção diária consolidada
-
-```math
-P_d = \sum_{i \in R_d} q_i
-```
-
-onde $R_d$ é o conjunto de registros do dia $d$ e $q_i$ a quantidade do registro $i$.
-
-### Nota conceitual importante
-
-No código legado, a propriedade `estoque` da série principal representa a soma acumulada da produção. Academicamente, essa variável deve ser interpretada como **produção acumulada**, e não como estoque físico medido:
+Daily production is obtained by aggregating valid records, while cumulative production is given by:
 
 ```math
 A_t = \sum_{i=1}^{t} P_i
 ```
 
-O **saldo de estoque projetado** somente é definido quando estoque inicial, produção e consumo são combinados na simulação, conforme a Eq. (11).
-
----
-
-## 8. Modelo analítico
-
-### 8.1 Média móvel
-
-A interface principal suaviza a série acumulada por uma janela de até sete dias. O simulador também calcula média móvel de sete dias sobre a **produção diária** para obter os percentis usados nos níveis reduzido e elevado.
-
-```math
-\bar{q}_7(t) = \frac{1}{n_t} \sum_{j=0}^{n_t-1} q(t-j)
-```
-
-### 8.2 Regressão linear
-
-A tendência é ajustada por mínimos quadrados:
+The linear trend can be represented as:
 
 ```math
 \widehat{A}_t = \beta_0 + \beta_1 t
 ```
 
-onde:
+The historical fitting coefficient `R²` **does not, by itself, measure out-of-sample predictive accuracy**.
 
-- $\beta_0$: intercepto;
-- $\beta_1$: inclinação/tendência produtiva;
-- $\widehat{A}_t$: produção acumulada estimada.
+### 6.2 Inventory Balance
 
-O sistema também apresenta $R^2$ como medida de aderência do ajuste histórico. **$R^2$ não deve ser interpretado isoladamente como validação de capacidade preditiva fora da amostra.**
-
----
-
-## 9. Geração dos cenários de estoque
-
-O simulador congela um **snapshot único** dos dados no momento do clique. Isso impede que uma nova atualização do MES altere a base enquanto os cenários de um mesmo lote estão sendo comparados.
-
-### 9.1 Níveis de produção
-
-```math
-P_{\mathrm{tip}} = \max(\beta_1,0) \qquad P_{\mathrm{red}} = \max\!\left[0,\min(Q_{25},P_{\mathrm{tip}})\right] \qquad P_{\mathrm{elev}} = \max(P_{\mathrm{tip}},Q_{75})
-```
-
-- **Típica:** inclinação positiva da regressão;
-- **Reduzida:** limitada pelo percentil 25 da média móvel da produção diária;
-- **Elevada:** limitada pelo percentil 75 da média móvel da produção diária.
-
-### 9.2 Níveis de consumo
-
-```math
-C_k = \rho_k C, \qquad \rho_k \in \{0.80,\,0.90,\,1.00,\,1.10,\,1.20\}
-```
-
-Quando $C=0$, é gerado apenas um cenário de **sem expedição**.
-
-O cruzamento de 3 níveis de produção com 5 níveis de consumo gera até **15 cenários**, com remoção de combinações numericamente duplicadas.
-
-### 9.3 Taxa líquida
-
-```math
-L_s = P_s - C_s
-```
-
-### 9.4 Saldo de estoque projetado
+For a scenario with daily production `P_s`, daily consumption `C_s`, and initial inventory `E_0`:
 
 ```math
 E_s(t) = E_0 + (P_s-C_s)t
 ```
 
-onde:
+- `E_s(t)` is the projected inventory balance on day `t`;
+- `E_0` is the specified initial inventory;
+- `P_s` and `C_s` are the scenario's production and consumption rates.
 
-- $E_0$: estoque físico disponível informado pelo usuário;
-- $P_s$: produção do cenário;
-- $C_s$: consumo do cenário;
-- $t$: horizonte;
-- $E_s(t)$: saldo projetado.
-
-### 9.5 Classificação
+Capacity and coverage can be related through the experimental parameterization:
 
 ```math
-E_s(D)<0 \Rightarrow \mathrm{FALTA} \qquad 0\leq E_s(D)\leq E_{\max} \Rightarrow \mathrm{ADEQUADO} \qquad E_s(D)>E_{\max} \Rightarrow \mathrm{EXCESSO}
+E_{\max} = P_{\mathrm{ref}} D_{\mathrm{coverage}}
 ```
 
-### 9.6 Primeiro alerta
+This expression defines a **parameterized operating capacity** in the experiment; it does not replace measurement of the facility's actual physical limit.
 
-Se $C_s>P_s$ (risco de falta):
+### 6.3 Manual Simulator Classification
 
 ```math
-d_{\mathrm{alert}} = \left\lceil \frac{E_0}{C_s-P_s} \right\rceil
+E_s(H) < 0 \Rightarrow \mathrm{SHORTAGE}
 ```
-
-Se $P_s>C_s$ (risco de atingir a capacidade):
 
 ```math
-d_{\mathrm{alert}} = \left\lceil \frac{E_{\max}-E_0}{P_s-C_s} \right\rceil
+0 \leq E_s(H) \leq E_{\max} \Rightarrow \mathrm{ADEQUATE}
 ```
-
-### 9.7 Faixa operacional de consumo
 
 ```math
-P_s + \frac{E_0-E_{\max}}{D} \leq C \leq P_s + \frac{E_0}{D}
+E_s(H) > E_{\max} \Rightarrow \mathrm{EXCESS}
 ```
 
-A interseção das faixas obtidas para produção reduzida, típica e elevada é apresentada como **faixa de consumo robusta**.
+Here, `H` is the projection horizon. The first day of shortage or capacity exceedance is determined from the discretized trajectory and its limits; displayed values may be subject to rounding rules defined in the implementation.
 
-### 9.8 Envelope dos cenários
+## 7. Manual Simulator
 
-```math
-E_{\inf}(t) = \min_s E_s(t) \qquad E_{\sup}(t) = \max_s E_s(t)
-```
+The module allows the user to select the **WC, projection horizon, initial inventory, daily consumption, and capacity**. Each run freezes a *snapshot* of the available data so scenarios can be compared against the same temporal reference.
 
-A linha de referência utiliza produção típica e consumo informado:
+The documented logic combines:
 
-```math
-E_{\mathrm{ref}}(t) = E_0 + (P_{\mathrm{tip}}-C)t
-```
+- three production levels: **reduced**, **typical**, and **increased**;
+- five relative consumption levels: **80%, 90%, 100%, 110%, and 120%** of baseline consumption;
+- up to **15 internal scenarios**, removing numerically duplicate combinations.
 
----
+When baseline consumption is zero, equivalent consumption scenarios are consolidated. Results include daily production and consumption, final inventory balance, classification (*shortage*, *adequate*, or *excess*), first alert, and comparison of trajectories. A simulation can also be emailed to registered recipients.
 
-## 10. Heatmap de produção
+Typical and alternative production rates are derived from regression and historical variation. Earlier documentation defines the typical rate using a nonnegative slope and the alternative levels using percentiles of a seven-day moving average. These mechanisms should be interpreted as scenario assumptions, **not individually validated forecasts**.
 
-O heatmap resume o atingimento de meta por **dia da semana × centro de trabalho × turno**.
+## 8. Automatic Simulator and Alerts
 
-```math
-\mathrm{Atingimento}(\%) = \frac{Q_{\mathrm{produzida}}}{Q_{\mathrm{meta}}} \times 100
-```
+The **Automatic Simulator** allows configuration of WC, projection horizon, initial inventory, minimum and maximum inventory, and consumption handling. After automatic mode is enabled, the application updates the projected trajectory according to its queries and execution conditions. An immediate manual refresh command is also available.
 
-A produção utiliza preferencialmente `goodQuantity`; na ausência desse valor, utiliza `totalQuantity`.
+In the study, the reference production rate was based on the **average of the last seven valid production days**. The model uses the cumulative inventory balance and preventive conditions near the limits. The five displayed states are:
 
-O heatmap é útil para identificar:
-
-- turnos com menor desempenho;
-- dias recorrentes de baixa produção;
-- diferenças entre centros de trabalho;
-- períodos em que a meta é mais ou menos atingida.
-
----
-
-## 11. Funcionalidades presentes
-
-### Monitoramento
-
-- status da conexão MES;
-- última sincronização;
-- quantidade de registros;
-- centros de trabalho identificados;
-- produção acumulada;
-- tendência produtiva;
-- métricas de sincronização quando existe timestamp de evento.
-
-### Visualização
-
-- heatmap de produção;
-- gráfico histórico;
-- média móvel;
-- regressão linear;
-- limite de estoque;
-- marcador do horizonte escolhido.
-
-### Simulação
-
-- horizonte de previsão;
-- estoque inicial;
-- consumo-base;
-- capacidade máxima;
-- até 15 cenários;
-- envelope dos cenários;
-- cenário esperado;
-- classificação falta/adequado/excesso;
-- primeiro alerta;
-- faixa robusta de consumo.
-
-### Comunicação
-
-- cadastro de destinatários;
-- habilitação/desabilitação de notificações;
-- envio por Resend;
-- registro de sucesso/falha em `notification_logs`.
-
-### Administração da fonte de dados
-
-- cadastrar conexão MES;
-- editar URL, endpoints e token;
-- testar conexão;
-- ativar/desativar a fonte oficial;
-- excluir conexão;
-- acompanhar a última sincronização.
-
----
-
-## 12. Jornada do usuário
-
-### Etapa 1 — Configurar a fonte MES
-
-1. Acesse **Conexões de API**.
-2. Clique em **Nova conexão**.
-3. Informe nome, URL base, endpoints e API key.
-4. Salve e use **Testar conexão**.
-5. Marque a conexão desejada como **Ativa**.
-
-> Apenas a conexão ativa alimenta o Gêmeo Digital.
-
-### Etapa 2 — Verificar a sincronização
-
-Observe o painel **Sincronização MES ↔ Gêmeo Digital**.
-
-Quando o MES fornece timestamp do evento, verifique:
-
-- latência E2E;
-- P50;
-- P95;
-- P99;
-- máximo;
-- percentual de eventos dentro de 1 s.
-
-Se aparecer **TIMESTAMP INDISPONÍVEL**, os dados continuam sendo atualizados, mas a conformidade soft real-time não pode ser demonstrada.
-
-### Etapa 3 — Explorar a produção
-
-Use:
-
-- KPIs para visão geral;
-- heatmap para comparar dias e turnos;
-- seleção de centro de trabalho para análise específica;
-- opção **Todos** para visão consolidada.
-
-### Etapa 4 — Configurar a análise principal
-
-| Campo | Como usar |
+| State | Interpretation |
 |---|---|
-| **Centro de trabalho** | escolha a linha que deseja analisar ou `Todos` |
-| **Dias observados** | define a janela histórica usada no ajuste |
-| **Dia que deseja verificar** | horizonte futuro da projeção principal |
-| **Consumo de estoque diário** | saída diária assumida |
-| **Limite máximo de estoque** | capacidade/política usada como referência |
+| **Lower risk** | Inventory below the lower safety range |
+| **Near minimum** | Approaching the lower limit / preventive region |
+| **Adequate** | Within the central range considered acceptable |
+| **Near maximum** | Approaching the upper limit / preventive region |
+| **Upper risk** | Exceedance or upper-risk condition |
 
-### Etapa 5 — Executar a simulação automática
+The limits are configurable. The experimental documentation describes lower and upper limits and preventive regions; therefore, results depend on user-defined values and the rules implemented in the running version.
 
-No módulo de cenários, informe:
+### 8.1 Historical Consumption: Important Constraint
 
-| Campo | Recomendação |
+The interface includes the **“Consider inventory outflows”** option, with configurable historical windows. However, **the experimental dataset described in the paper did not contain real historical shipping/consumption data or physical inventory records**, so the automatic simulator used **zero consumption in its calculations**. This **does not mean that the factory had no actual consumption or shipments**.
+
+Consequently, the automatic simulator experiments verify its mathematics and behavior **under this specific condition**, but not its predictive accuracy when actual outflows are different from zero.
+
+### 8.2 Email Notifications
+
+The module supports automatic alerts based on risk conditions and notification settings. Delivery depends on the email integration (for example, Resend), authorized credentials, application delivery rules, and registered recipients.
+
+## 9. Methodology and Experimental Evaluation
+
+The scientific study is organized into **four phases**:
+
+| Phase | Purpose |
 |---|---|
-| **Centro de trabalho** | mantenha coerência com a linha operacional estudada |
-| **Prever estoque no dia** | escolha o horizonte relacionado à decisão que precisa tomar |
-| **Estoque disponível hoje** | use contagem física ou valor oficial do estoque atual |
-| **Quanto costuma sair por dia** | use média real de consumo/expedição, não um valor arbitrário |
-| **Capacidade máxima** | use limite físico, contratual ou operacional real |
+| **1. Problem characterization** | Understand the process and products, monitored WCs, infrastructure, and DT scope |
+| **2. DT development** | Map physical and virtual elements, integrate the REST API, and implement projections, simulations, and alerts |
+| **3. Experimental evaluation** | Run scenarios, verify the implementation against independent equations, and analyze sensitivity |
+| **4. Decision support and improvements** | Interpret alerts and inventory conditions and support planning adjustments |
 
-Clique em **Simular cenários**. O sistema calcula automaticamente as variações de produção e consumo.
+### 9.1 Manual Simulator Experimental Design
 
-### Etapa 6 — Interpretar o resultado
+- **1,000 runs with distinct configurations**, selected from **42,336 possible combinations** using a deterministic modular permutation (step size 37 and initial offset 17);
+- variation in WCs (Line 1, Line 3, and both), observed production window, projection horizon, inventory coverage, initial inventory, and consumption;
+- up to 15 scenarios generated per run, with redundant outputs removed;
+- **13,645 projections** after deduplication.
 
-Priorize quatro perguntas:
+### 9.2 Automatic Simulator Experimental Design
 
-1. **Há cenários de falta?**  
-   Indicam que consumo pode superar produção e estoque inicial dentro do horizonte.
+- **1,000 total runs**, comprising **900 distinct configurations** and **100 controlled repetitions** to test deduplication;
+- projection horizons of **7, 15, 30, 45, 60, and 90 days**;
+- inventory coverage levels of **5, 10, 20, 30, 45, and 60 days**;
+- variation in WC, initial inventory, minimum inventory mode, and consumption option;
+- trajectory calculated using recent reference production;
+- **zero consumption in the calculations** because historical outflow records were unavailable.
 
-2. **Há cenários de excesso?**  
-   Indicam possibilidade de ultrapassar a capacidade informada.
+### 9.3 Verification and Sensitivity
 
-3. **Qual é o primeiro alerta?**  
-   Mostra o instante estimado para falta ou capacidade.
+Independent verification compared final inventory (manual) and trajectories (automatic) with inventory balance equations. The study examined `R²`, `MAE`, `RMSE`, absolute errors, error relative to capacity, rounding, classifications, alerts, and monotonicity.
 
-4. **Existe faixa robusta de consumo?**  
-   Representa o intervalo de consumo que mantém o saldo dentro dos limites nas três condições de produção.
+Sensitivity analysis used the **Kruskal–Wallis test with epsilon-squared**, **permutation importance with Extra Trees and five-fold cross-validation**, and **Spearman correlation**. The response variables were the proportion of adequate scenarios in the manual simulator and the final inventory-to-capacity ratio in the automatic simulator.
 
-### Etapa 7 — Compartilhar a análise
+**Important:** mathematical verification must not be confused with validation of predictive accuracy against real inventory data.
 
-1. Cadastre os destinatários.
-2. Habilite **Receber notificações**.
-3. Execute a simulação.
-4. Clique em **Enviar simulação**.
+## 10. Experimental Results
 
-A aplicação envia parâmetros, resultados, cenários e informações técnicas por e-mail.
+The figures in this section are **results reported in the paper**, not metrics calculated automatically by the dashboard when a visitor opens the website.
 
----
+### 10.1 Mathematical Verification
 
-## 13. Como escolher parâmetros adequados
+| Metric | Manual | Automatic |
+|---|---:|---:|
+| Evaluated projections / runs | 13,645 projections | 1,000 runs |
+| `R²` (analytical reference × simulator) | 0.999999992 | 0.9999999992 |
+| MAE | 13.38 units | 10.07 units |
+| RMSE | 19.58 units | 13.44 units |
+| Median absolute error | 8.00 units | 8.31 units |
+| Maximum absolute error | 86.00 units | 42.31 units |
+| Mean error relative to capacity | 0.0128% | 0.00677% |
+| Rounding tolerance violations | 0 | 0 |
 
-Os parâmetros devem representar condições reais ou hipóteses claramente justificadas.
+The study reports **100% agreement** with the verified classification rules, consumption ranges, and alerts for the manual simulator and **100% monotonicity** in the automatic simulator's trajectories.
 
-### Janela histórica
+### 10.2 Classification Distribution
 
-- use uma janela curta quando houver mudança recente de processo;
-- use uma janela maior quando a produção for relativamente estável;
-- evite misturar longos períodos com condições produtivas estruturalmente diferentes;
-- compare o $R^2$ apenas como aderência histórica, não como garantia de previsão futura.
+**Manual (13,645 scenarios):**
 
-### Horizonte
+| Classification | Scenarios |
+|---|---:|
+| Adequate | 7,697 |
+| Excess | 3,797 |
+| Shortage | 2,151 |
 
-O horizonte deve acompanhar o ciclo decisório:
+**Automatic (1,000 runs):**
 
-- curto prazo: programação operacional;
-- médio prazo: planejamento de produção e expedição;
-- horizonte maior: somente quando a estabilidade do processo justificar a extrapolação.
+| State | Runs |
+|---|---:|
+| Upper risk | 632 |
+| Lower risk | 252 |
+| Near minimum | 55 |
+| Near maximum | 46 |
+| Adequate | 15 |
 
-Quanto maior o horizonte, maior o efeito acumulado de pequenas diferenças entre produção e consumo.
+These distributions describe **test scenarios**, not the observed incidence of shortage or excess inventory events at the factory.
 
-### Estoque inicial
+### 10.3 Sensitivity
 
-Use o estoque físico mais recente. A qualidade da projeção de estoque depende diretamente de $E_0$.
+Relative permutation importance indicated that **inventory coverage + projection horizon** accounted for **80.0%** of importance in the manual simulator and **99.1%** in the automatic simulator.
 
-### Consumo
+| Parameter | Manual importance | Automatic importance |
+|---|---:|---:|
+| Inventory coverage | 42.1% | 58.8% |
+| Projection horizon | 37.9% | 40.3% |
+| Consumption factor | 14.6% | Not comparably evaluated |
+| Initial inventory | 3.7% | 0.9% |
+| Work center | 1.3% | Less than 0.1% |
+| Historical days | 0.4% | — |
+| Minimum inventory mode | — | Less than 0.1% |
+| Consumption option | — | Less than 0.1% |
 
-Use preferencialmente:
+In the manual simulator, when **horizon/coverage ≤ 0.5**, the proportion of adequate scenarios was **96.3%**; when **horizon/coverage > 2**, it was **20.6%**. The Spearman correlation between this ratio and the proportion of adequate scenarios was **−0.810**. The consumption-to-production ratio was associated with normalized inventory at **−0.784**.
 
-- média histórica de expedição;
-- pedidos confirmados convertidos em demanda diária;
-- política formal de consumo da empresa.
+In the automatic simulator, the horizon-to-coverage ratio showed a Spearman correlation of **0.949** with normalized inventory under the evaluated experimental design. The consumption option did not change the results because historical outflows were unavailable.
 
-O simulador cria automaticamente níveis de 80%, 90%, 100%, 110% e 120% do valor-base.
+### 10.4 Evolution and Time to Excess Inventory
 
-### Capacidade
+- In the manual simulator, across the 7- and 90-day horizon groups, the proportion of adequate scenarios ranged from **88.7% to 28.3%**, shortage from **4.1% to 25.8%**, and excess from **7.1% to 45.9%**.
+- In the manual 90-day analysis, **1,037 of 2,260 scenarios (45.9%)** exhibited excess, with median alert times ranging from **2 to 80 days**.
+- In the automatic simulator, the subset of **139 configurations** with a 90-day horizon exhibited excess in all configurations, with median times ranging from **0 to 61 days**, under zero consumption in the calculations.
 
-Pode representar:
+**Interpretation caution:** horizon groups also differ in other configuration parameters. Therefore, aggregate comparisons between groups do not isolate a causal effect of the horizon alone.
 
-- capacidade física do armazém;
-- limite de segurança;
-- limite de capital imobilizado definido pela empresa;
-- política interna de estoque máximo.
+## 11. How to Use
 
-Se o valor utilizado não for um limite físico, documente sua origem para evitar interpretações incorretas.
+### 11.1 Initial Setup
 
----
+1. Open https://mina-prod-trend.lovable.app/.
+2. Under **API Connections**, register an authorized MES connection (name, URL, and credentials).
+3. Activate the connection and confirm that synchronization indicators and WCs appear.
+4. If the connection or data are unavailable, the website will show an empty state; this does not imply an absence of industrial production.
 
-## 14. Persistência de dados
+### 11.2 Production Analysis
 
-O Supabase/PostgreSQL mantém estruturas auxiliares da aplicação:
+1. Select a WC or the `All` option, when available.
+2. Adjust the **observed days** and projection horizon.
+3. Examine cumulative production, trend, and heatmap.
+4. Interpret the inventory limit as a configured reference rather than inventory measured by the sensor.
 
-| Tabela | Finalidade |
+### 11.3 Manual Simulator
+
+1. Select the WC and number of projection days.
+2. Enter **current available inventory**, **daily consumption**, and **maximum capacity**.
+3. Click **Simulate Scenarios** (or the equivalent label displayed by the application).
+4. Compare alternatives, classifications, and the date of the first alert.
+5. If needed, select **Send Simulation** after configuring a recipient.
+
+### 11.4 Automatic Simulator
+
+1. Configure WC, projection horizon, initial inventory, maximum inventory, and minimum inventory.
+2. Choose whether to include inventory outflows, and confirm that valid historical records are available.
+3. Click **Update Projection Now** (or the equivalent label displayed by the application), or enable **Automatic Mode**.
+4. Monitor the trajectory and five inventory states.
+5. Enable recipients to receive notifications, subject to the application's delivery rules.
+
+## 12. Technologies and Installation
+
+### 12.1 Documented Technologies
+
+Project documentation and the public dependency manifest identify the following primary components:
+
+| Layer | Technologies |
 |---|---|
-| `mes_connections` | conexões MES, endpoints, token, situação e última sincronização |
-| `notification_recipients` | nome, e-mail e habilitação dos destinatários |
-| `notification_logs` | rastreabilidade dos envios e falhas de e-mail |
+| Development and deployment | Lovable |
+| Web application | React 19, TypeScript, TanStack Start and Router |
+| Data and queries | TanStack Query, REST API, Supabase/PostgreSQL |
+| User interface | Radix UI, Tailwind CSS, Recharts |
+| Validation | Zod |
+| Development tools | Vite, Bun, ESLint, Prettier |
+| Email | Resend / configured delivery integration |
+| Version control | Git and GitHub |
 
-Os registros de produção do MES são consultados pela API e mantidos no estado/cache da aplicação; o Supabase não atua, na implementação atual, como repositório intermediário da série histórica de produção.
+Detailed dependencies and versions should always be checked in [`package.json`](https://github.com/dmax2023/mina-prod-trend2/blob/main/package.json) and the repository's lockfile.
 
----
-
-## 15. Segurança e boas práticas
-
-O projeto adota algumas decisões importantes:
-
-- API keys do MES são usadas apenas em funções server-side;
-- token exibido na interface é mascarado;
-- somente uma conexão MES pode ser marcada como fonte oficial;
-- entradas são validadas com Zod;
-- operações administrativas usam cliente Supabase server-side;
-- chaves de serviço não devem ser expostas ao navegador;
-- logs de envio permitem rastrear falhas de notificação;
-- cache de produção é descartado quando a fonte MES é trocada;
-- código utiliza TypeScript, ESLint e Prettier para consistência.
-
-### Atenção importante
-
-**Nunca publique tokens, API keys ou arquivos `.env` no GitHub.** O README anterior continha credenciais em texto claro. Qualquer chave que já tenha sido versionada publicamente deve ser considerada comprometida e rotacionada no serviço correspondente.
-
----
-
-## 16. Instalação local
-
-### Pré-requisitos
-
-- Node.js compatível com Vite/TanStack Start;
-- npm, pnpm ou Bun;
-- projeto Supabase configurado;
-- acesso a uma API MES compatível;
-- conta/integração Resend, caso o envio de e-mail seja utilizado.
-
-### Clone
+### 12.2 Local Execution
 
 ```bash
-git clone https://github.com/dmax2023/mina-prod-trend.git
-cd mina-prod-trend
-```
-
-### Dependências
-
-Com npm:
-
-```bash
+git clone https://github.com/dmax2023/mina-prod-trend2.git
+cd mina-prod-trend2
 npm install
-```
-
-ou com Bun:
-
-```bash
-bun install
-```
-
-### Variáveis de ambiente
-
-Crie seu próprio `.env` local. Não copie credenciais de ambientes públicos.
-
-```env
-SUPABASE_URL=
-SUPABASE_PUBLISHABLE_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-VITE_SUPABASE_URL=
-VITE_SUPABASE_PUBLISHABLE_KEY=
-LOVABLE_API_KEY=
-RESEND_API_KEY=
-RESEND_FROM_EMAIL=
-```
-
-Algumas variáveis podem ser injetadas automaticamente pelo Lovable Cloud em implantação gerenciada.
-
-### Desenvolvimento
-
-```bash
 npm run dev
 ```
 
-### Build
+Using Bun, if available:
+
+```bash
+bun install
+bun run dev
+```
+
+Project commands:
 
 ```bash
 npm run build
-```
-
-### Lint
-
-```bash
 npm run lint
-```
-
-### Formatação
-
-```bash
 npm run format
 ```
 
----
+For full functionality, configure services and environment variables in the **appropriate environment** (Lovable Cloud, server, or local environment), without including real keys in the repository. Variable names and requirements may change between revisions; consult the configuration modules and deployment environment.
 
-## 17. Estrutura principal do projeto
+## 13. Reproducibility, Security, and Limitations
 
-```text
-src/
-├── components/
-│   ├── ConexoesApi.tsx
-│   ├── DestinatariosSimulacao.tsx
-│   ├── HeatmapProducao.tsx
-│   ├── SyncMes.tsx
-│   └── inventory-simulator/
-│       ├── InventorySimulator.tsx
-│       ├── SimulationChart.tsx
-│       ├── SimulationMethodology.tsx
-│       ├── SimulationSummary.tsx
-│       └── SimulationTable.tsx
-├── integrations/supabase/
-├── lib/
-│   ├── connections.functions.ts
-│   ├── inventorySimulation.ts
-│   ├── mes.functions.ts
-│   ├── mes.server.ts
-│   ├── notifications.functions.ts
-│   ├── recipients.functions.ts
-│   ├── simulation.ts
-│   └── twin-math.ts
-└── routes/
-    └── index.tsx
-```
+### 13.1 Reproducibility
 
----
+The research documents parameters, run counts, metrics, and mathematical rules. Full independent reproduction requires the corresponding experimental scripts/results, software versions, and datasets authorized for use. **The application repository must not be assumed to contain all original industrial data or all analytical scripts**.
 
-## 18. Limitações atuais
+A minimum reproducibility package should include:
 
-Para interpretar corretamente os resultados:
+- data-source description and version information (anonymized where necessary);
+- configurations for each run and sampled parameters;
+- outputs from the 1,000 experiments for each simulator;
+- analytical reference calculations and tolerances;
+- sensitivity analysis and figure-generation code;
+- access conditions, data licensing, and execution instructions.
 
-- a produção futura é representada por tendência linear;
-- produção e consumo são considerados constantes dentro de cada cenário;
-- o consumo-base é informado pelo usuário;
-- o estoque físico histórico não é atualmente fornecido pelo MES usado no estudo;
-- o $R^2$ mede ajuste histórico e não substitui validação fora da amostra;
-- MAE/MAPE/RMSE de backtesting não estão implementados no fluxo operacional atual;
-- sazonalidade, indisponibilidade, troca de produto e variáveis exógenas não são explicitamente modeladas;
-- a solução não executa atuação automática sobre o processo físico;
-- a comprovação de soft real-time depende da existência de timestamp real do evento no MES.
+### 13.2 Security Before Publishing
 
----
+**Attention: a `.env` file is listed in the public `mina-prod-trend2` repository.** This does not prove secrets are present, but warrants immediate inspection. Do not publish actual `API_KEY`, `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, MES tokens, or other credentials. If any secret has been committed, **revoke/rotate the credential** and treat Git history as potentially exposed; deleting the file in the current commit alone does not remove historical versions.
 
-## 19. Próximas evoluções recomendadas
+Store sensitive local settings outside version control and use `.env.example` only with placeholder values. Respect the industrial partner's access and privacy policies.
 
-- implementar **rolling-origin backtesting** com MAE e métricas adequadas ao conjunto de dados;
-- utilizar série histórica real de estoque e expedição, quando disponível;
-- substituir nomenclaturas legadas de `estoque acumulado` por `produção acumulada` na visão principal;
-- incorporar modelos não lineares somente quando apresentarem ganho fora da amostra;
-- integrar variáveis exógenas relevantes, como pedidos, lead time e indisponibilidade;
-- avaliar comunicação orientada a eventos (MQTT/WebSocket) quando houver necessidade de menor latência;
-- ampliar integração dos endpoints de refugo, retrabalho, OEE e estado de produção;
-- adicionar testes unitários para funções matemáticas e regras de classificação.
+### 13.3 Scientific and Operational Limitations
 
----
+- The study covers **one manufacturing company and a limited set of WCs**; generalizability should be tested in other contexts.
+- The inventory balance assumes constant production and consumption within the scenarios considered.
+- In the evaluated case, **historical physical inventory and actual consumption/shipping time series were unavailable** for validating the automatic simulator's projections.
+- The `R²`, MAE, and RMSE results presented in this README measure **agreement between the implementation and reference equations**, not forecast error against observed inventory.
+- Sensitivity analysis quantifies influence within the sampled configurations and does not establish operational causality.
+- The application does not perform automatic control of the physical process.
+- One-second synchronization is a configured query interval, not evidence of one-second end-to-end latency for every event.
+- Notification operation depends on external configuration and the system's state/deduplication rules.
 
-## 20. Referências metodológicas
+## 14. Future Work, References, and License
 
-Referências relacionadas ao desenvolvimento e às decisões metodológicas empregadas:
+### 14.1 Next Steps
 
-[1] ISO, “Automation systems and integration—Digital twin framework for manufacturing—Part 1: Overview and general principles,” **ISO 23247-1:2021**, Geneva, Switzerland, 2021.
+- incorporate **real historical consumption, shipping, and inventory data**;
+- assess predictive performance through **out-of-sample temporal validation** (*rolling-origin / backtesting*);
+- test exogenous variables, seasonality, and nonlinear models against simple baselines;
+- evaluate operation with reliable source timestamps and end-to-end latency metrics;
+- expand automated tests of classification rules, limits, alerts, and deduplication;
+- repeat the experiments with other manufacturers and WCs;
+- release anonymized, versioned experimental materials subject to applicable authorizations.
 
-[2] ISO, “Automation systems and integration—Digital twin framework for manufacturing—Part 2: Reference architecture,” **ISO 23247-2:2021**, Geneva, Switzerland, 2021.
+### 14.2 Essential References
 
-[3] J. P. C. Kleijnen, *Design and Analysis of Simulation Experiments*, 2nd ed. Cham, Switzerland: Springer, 2015, doi: 10.1007/978-3-319-18087-8.
+1. ISO. *ISO 23247-1:2021 — Automation systems and integration — Digital twin framework for manufacturing — Part 1: Overview and general principles.*
+2. ISO. *ISO 23247-2:2021 — Automation systems and integration — Digital twin framework for manufacturing — Part 2: Reference architecture.*
+3. **Data-Driven MES-Integrated Digital Twin for Inventory Projection and Scenario Analysis.** Scientific manuscript documenting the case study, both simulators, and the experimental evaluation. **Do not claim publication or acceptance before editorial confirmation.**
 
-[4] A. Cimino, M. G. Gnoni, F. Longo, and A. La Rosa, “Digital Twin (DT) based methodology to support effective design of industrial production lines,” *Procedia Computer Science*, vol. 217, pp. 1896–1907, 2023, doi: 10.1016/j.procs.2022.12.390.
+### 14.3 How to Cite
 
-[5] S. Teerasoponpong and A. Sopadang, “Decision support system for adaptive sourcing and inventory management in small- and medium-sized enterprises,” *Robotics and Computer-Integrated Manufacturing*, vol. 73, Art. no. 102226, 2022, doi: 10.1016/j.rcim.2021.102226.
+Once the paper has an identifiable publication record, add its final reference and, if appropriate, a `CITATION.cff` file with DOI, authors, and version. Until then, cite the repository with its URL and the revision/commit used.
 
-[6] E. A. Silver, D. F. Pyke, and D. J. Thomas, *Inventory and Production Management in Supply Chains*, 4th ed. Boca Raton, FL, USA: CRC Press, 2016.
+### 14.4 License and Use
+
+Check the repository for a `LICENSE` file and review its contents. **Making source code public does not automatically grant permission for reuse.** The software license and terms of use for industrial data must be explicitly defined by the responsible parties.
 
 ---
 
-## 21. Interpretação resumida
-
-A lógica do projeto pode ser resumida em quatro etapas:
-
-**Observar → Sincronizar → Simular → Decidir**
-
-1. **Observar:** sensor, IoT e MES registram o processo produtivo.
-2. **Sincronizar:** a aplicação consulta a fonte MES e atualiza sua representação digital.
-3. **Simular:** produção histórica é transformada em níveis produtivos e combinada com hipóteses de consumo.
-4. **Decidir:** o usuário compara falta, adequação, excesso, alertas e faixa operacional antes de agir no processo real.
-
----
-
-## 22. Licença e uso
-
-Defina explicitamente uma licença no repositório antes de reutilização por terceiros. Na ausência de um arquivo `LICENSE`, o código permanece protegido pelas regras padrão de copyright e não deve ser assumido como software livre.
-
----
-
-**Status:** protótipo funcional de pesquisa e apoio à decisão industrial.  
-**Escopo:** monitoramento, análise, projeção e simulação; sem controle automático do processo físico.
+**Summary:** observe → synchronize → simulate → interpret → support decisions.  
+**Documentation update:** October 26, 2026, aligned with the manuscript version and the public interface inspected on that date.  
+**Scope:** research application for monitoring, simulation, and analysis; no automatic intervention in the physical process.
