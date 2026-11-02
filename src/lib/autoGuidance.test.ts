@@ -1,4 +1,10 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, it as test } from 'node:test';
+import assert from 'node:assert/strict';
+const expect = (actual: unknown) => ({
+  toBe: (expected: unknown) => assert.equal(actual, expected),
+  toBeCloseTo: (expected: number) => assert.ok(typeof actual === 'number' && Math.abs(actual - expected) < 0.0001),
+  toBeLessThan: (expected: number) => assert.ok(typeof actual === 'number' && actual < expected),
+});
 import { analisarAjuste } from './autoGuidance';
 import { calcularProjecaoAutomatica } from './autoSimulation';
 
@@ -51,7 +57,7 @@ describe('Quantitative advisory targets do not execute adjustments', () => {
     expect(a.finalStock).toBe(65000);
   });
   test('existing projection and first-risk priority stay unchanged', () => {
-    const series = Array.from({length: 7}, (_,i) => ({dia: i+1, date: `2026-10-${10+i}`, producao: 10000, acumulado: (i+1)*10000, estoque: (i+1)*10000, media7:10000}));
+    const series = Array.from({length: 7}, (_,i) => ({dia: i+1, date: `2026-10-${10+i}`, producao: 10000, estoque: (i+1)*10000, estoqueSuavizado: (i+1)*10000}));
     const s = calcularProjecaoAutomatica(series, {workCenter:'test', horizonte:30, estoqueAtual:2000, estoqueMaximo:100000, minimoModo:'auto', estoqueMinimoManual:20000, consumoAtivo:false, janelaConsumo:30, pctMinimo:20, pctPreAlerta:20, pctProducaoMin:20, pctProducaoMax:100});
     expect(s?.producaoRef).toBe(10000);
     expect(s?.consumoRef).toBe(null);
