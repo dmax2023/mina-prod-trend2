@@ -15,6 +15,7 @@ import {
 import type { ProductionRecord } from "@/lib/mes.functions";
 import { enviarSimulacao } from "@/lib/notifications.functions";
 import { formatarNumero, prepararSerie, TODOS_WORK_CENTERS } from "@/lib/twin-math";
+import { recomendarAjuste } from "@/lib/autoGuidance";
 import {
   calcularProjecaoAutomatica,
   chaveAlerta,
@@ -71,6 +72,14 @@ export function AutoSimulator({
     pctProducaoMax: 100,
   });
   const [avancado, setAvancado] = useState(false);
+  const [guidanceLang, setGuidanceLang] = useState<"pt" | "en">("pt");
+  useEffect(() => {
+    const update = () => setGuidanceLang(document.documentElement.lang === "en" ? "en" : "pt");
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+    return () => observer.disconnect();
+  }, []);
   const [snap, setSnap] = useState<AutoSnapshot | null>(null);
   const [ultimoEnvio, setUltimoEnvio] = useState<string | null>(null);
   const ultimaChave = useRef<string | null>(null);
@@ -401,7 +410,7 @@ export function AutoSimulator({
         {snap ? (
           <div className="rounded-md border border-border p-4 text-sm">
             <p className="text-xs uppercase tracking-widest text-muted-foreground">Recomendação</p>
-            <p className="mt-1">{snap.recomendacao}</p>
+            <p className="mt-1 whitespace-pre-line" data-no-translate>{recomendarAjuste(snap, guidanceLang)}</p>
             <p className="mt-2 text-xs text-muted-foreground">
               O Gêmeo Digital apenas monitora, projeta e recomenda — nenhuma ação é executada no processo real.
               {auto ? " Alertas são enviados por e-mail aos destinatários de Notificações somente quando a situação muda." : ""}

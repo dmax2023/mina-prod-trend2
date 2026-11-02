@@ -8,3 +8,6 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Keep automatic decision-support arithmetic in the pure `autoGuidance` module, separate from projection and alert logic, so advisory targets never alter the industrial model.
+- Render simulation email content through the pure `simulationEmail` module using the existing snapshots; preserve the established server-side sender, recipients and logs.
